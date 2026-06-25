@@ -31,10 +31,14 @@
         <h1>{{ \App\Models\Setting::get('instanceName', 'Notefix') }}</h1>
         <p class="lead">Your notes, kept in sync. Sign in to reach your workspaces from the Notefix app, or create an account to get started.</p>
         <div class="actions">
-            <a class="btn primary" href="{{ url('/login') }}">Sign in</a>
-            @if (\App\Models\Setting::get('registrationEnabled', 'true') === 'true')
-                <a class="btn ghost" href="{{ url('/register') }}">Create account</a>
-            @endif
+            @auth
+                <a class="btn primary" href="{{ url('/workspaces') }}">My workspaces</a>
+            @else
+                <a class="btn primary" href="{{ url('/login') }}">Sign in</a>
+                @if (\App\Models\Setting::get('registrationEnabled', 'true') === 'true')
+                    <a class="btn ghost" href="{{ url('/register') }}">Create account</a>
+                @endif
+            @endauth
         </div>
     </main>
     <footer>

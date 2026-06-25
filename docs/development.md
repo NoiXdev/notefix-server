@@ -37,6 +37,15 @@ ddev exec vendor/bin/phpstan analyse  # Larastan
 - **Self-registration** is gated by the `registrationEnabled` setting — flip it on the Filament "Instance settings" page (`/admin/instance-settings`). When off, `/register` redirects to login and the registration POST is rejected.
 - **Two-factor (TOTP)**: users enable + confirm it on `/security` (QR + recovery codes). With the `mfaEnforced` setting on, authenticated users without confirmed 2FA are sent to `/security` until they comply.
 
+## Sharing (self-service)
+
+A workspace **owner** shares without the admin panel (package **W+**):
+
+- `/workspaces` — the signed-in user's workspaces (owned + member). Owned ones link to "Share".
+- `/workspaces/{id}/share` — owner-only (`WorkspacePolicy::manage`): change/remove members and create **single-use** invite links (role + optional expiry) or revoke open ones. A last-owner guard keeps every workspace with ≥ 1 owner.
+- `/invite/{token}` — an invitee (logged in) joins as the invited role; the invite is consumed on first accept. Expired/used/unknown links show a friendly error.
+- The joined workspace appears in the desktop picker via `GET /api/workspaces` (no client change).
+
 ## Data model
 
 - `users` (`is_admin` gates the admin panel; Fortify two-factor columns)
