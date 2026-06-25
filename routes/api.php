@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\OAuthConfigController;
 use App\Http\Controllers\SyncController;
+use App\Http\Controllers\WorkspaceController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -12,6 +13,7 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:api');
 
 Route::middleware('auth:api')->group(function () {
+    Route::get('/workspaces', [WorkspaceController::class, 'index']);
     Route::get('/workspaces/{workspace}/changes', [SyncController::class, 'pull']);
     Route::post('/workspaces/{workspace}/changes', [SyncController::class, 'push']);
 });
