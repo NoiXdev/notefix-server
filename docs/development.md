@@ -57,12 +57,18 @@ the replaced note content is kept as a revision.
 - `GET /api/workspaces` — the authenticated user's workspaces (`id`, `name`, `role`); the desktop app shows these in a picker so each server context binds to one workspace.
 - `GET /api/workspaces/{workspace}/changes?since={seq}` — everything changed after the cursor (tombstones included).
 - `POST /api/workspaces/{workspace}/changes` — apply a batch of folder/note upserts/deletes; returns the canonical entities + new cursor.
+- `GET /api/workspaces/{workspace}/images` — image manifest `[{ path, size, hash }]` (members).
+- `POST /api/workspaces/{workspace}/images` — upload one image (multipart `path` + `file`, editors+; idempotent, `image/*` ≤ 10 MB, safe relpath). Blobs live on the `local` disk under `images/{workspace}/{path}`.
+- `GET /api/workspaces/{workspace}/image?path=…` — download one image's bytes (members).
 
 The desktop client (package **C1**) syncs the bound workspace against these
 endpoints: it caches notes/folders locally, marks edited rows dirty (a write
 queue), pushes them then pulls on a 15s timer / on demand, and applies the
-server's canonical rows (LWW resolved server-side). A human-readable reference
-is served at `/docs/api` (login required). Web sign-in lives at `/login`.
+server's canonical rows (LWW resolved server-side). After the note phase it
+transfers referenced image blobs (**S2b**): it diffs the local images against
+the manifest and uploads/downloads the difference (path-addressed, non-fatal).
+A human-readable reference is served at `/docs/api` (login required). Web sign-in
+lives at `/login`.
 
 ## Desktop auth bridge
 
@@ -77,5 +83,5 @@ PKCE (no client secret). A first-party "Notefix Desktop" Passport client with th
 
 ## Out of scope (later packages)
 
-- Image sync (upload/download/storage) — **S2b**
+- Server-side orphan-image GC (blobs of deleted notes are kept)
 - Invitations and richer sharing UX beyond the admin panel
