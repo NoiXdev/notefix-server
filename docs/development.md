@@ -54,11 +54,15 @@ Server-authoritative sync, per workspace, behind `auth:api` (Passport). Members
 read, editors/owners write. Conflicts resolve last-write-wins by `updatedAt`;
 the replaced note content is kept as a revision.
 
+- `GET /api/workspaces` — the authenticated user's workspaces (`id`, `name`, `role`); the desktop app shows these in a picker so each server context binds to one workspace.
 - `GET /api/workspaces/{workspace}/changes?since={seq}` — everything changed after the cursor (tombstones included).
 - `POST /api/workspaces/{workspace}/changes` — apply a batch of folder/note upserts/deletes; returns the canonical entities + new cursor.
 
-A human-readable reference is served at `/docs/api` (login required). Web sign-in
-lives at `/login`.
+The desktop client (package **C1**) syncs the bound workspace against these
+endpoints: it caches notes/folders locally, marks edited rows dirty (a write
+queue), pushes them then pulls on a 15s timer / on demand, and applies the
+server's canonical rows (LWW resolved server-side). A human-readable reference
+is served at `/docs/api` (login required). Web sign-in lives at `/login`.
 
 ## Desktop auth bridge
 
@@ -74,6 +78,4 @@ PKCE (no client secret). A first-party "Notefix Desktop" Passport client with th
 ## Out of scope (later packages)
 
 - Image sync (upload/download/storage) — **S2b**
-- The `notefix://` PKCE token exchange driven from the desktop app — **A1**
-- The client-side sync engine (cache + write queue) — **C1**
 - Invitations and richer sharing UX beyond the admin panel
