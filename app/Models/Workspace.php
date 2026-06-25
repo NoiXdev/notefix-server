@@ -33,4 +33,20 @@ class Workspace extends Model
     {
         return $this->hasMany(WorkspaceMember::class);
     }
+
+    /**
+     * @return HasMany<Note, $this>
+     */
+    public function notes(): HasMany
+    {
+        return $this->hasMany(Note::class);
+    }
+
+    /**
+     * @return HasMany<Folder, $this>
+     */
+    public function folders(): HasMany
+    {
+        return $this->hasMany(Folder::class);
+    }
 }
