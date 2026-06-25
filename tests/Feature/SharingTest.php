@@ -77,3 +77,31 @@ it('renders the share page for the owner and forbids others', function () {
     $this->actingAs($owner)->get("/workspaces/{$ws->id}/share")->assertOk();
     $this->actingAs(User::factory()->create())->get("/workspaces/{$ws->id}/share")->assertForbidden();
 });
+
+it('accepts an open invite, creating a membership and consuming it', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $invite = Invitation::create(['workspace_id' => $ws->id, 'token' => 'join-me', 'role' => WorkspaceRole::Editor, 'invited_by' => $owner->id, 'created_at' => now()]);
+
+    $invitee = User::factory()->create();
+    $this->actingAs($invitee)->post('/invite/join-me/accept')->assertRedirect('/workspaces');
+
+    expect($ws->memberRole($invitee))->toBe(WorkspaceRole::Editor)
+        ->and($invite->fresh()->isOpen())->toBeFalse();
+});
+
+it('shows a friendly error for a used token', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    Invitation::create(['workspace_id' => $ws->id, 'token' => 'once', 'role' => WorkspaceRole::Viewer, 'invited_by' => $owner->id, 'accepted_at' => now(), 'created_at' => now()]);
+
+    $this->actingAs(User::factory()->create())->get('/invite/once')->assertOk()->assertSee('no longer', false);
+});
+
+it('redirects a guest to login', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    Invitation::create(['workspace_id' => $ws->id, 'token' => 'guesttok', 'role' => WorkspaceRole::Viewer, 'invited_by' => $owner->id, 'created_at' => now()]);
+
+    $this->get('/invite/guesttok')->assertRedirect('/login');
+});

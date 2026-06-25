@@ -24,4 +24,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/workspaces/{workspace}/invitations/{invitation}', [WorkspaceSharingController::class, 'destroyInvitation'])->name('workspaces.invitations.destroy');
     Route::patch('/workspaces/{workspace}/members/{member}', [WorkspaceSharingController::class, 'updateMember'])->name('workspaces.members.update');
     Route::delete('/workspaces/{workspace}/members/{member}', [WorkspaceSharingController::class, 'destroyMember'])->name('workspaces.members.destroy');
+
+    Route::get('/invite/{invitation:token}', [\App\Http\Controllers\InvitationController::class, 'show'])->name('invite.show');
+    Route::post('/invite/{invitation:token}/accept', [\App\Http\Controllers\InvitationController::class, 'accept'])->name('invite.accept');
 });
