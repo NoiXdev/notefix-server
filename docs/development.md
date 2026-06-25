@@ -60,6 +60,17 @@ the replaced note content is kept as a revision.
 A human-readable reference is served at `/docs/api` (login required). Web sign-in
 lives at `/login`.
 
+## Desktop auth bridge
+
+The desktop app signs in through the browser with OAuth2 authorization-code +
+PKCE (no client secret). A first-party "Notefix Desktop" Passport client with the
+`notefix://auth` redirect is created on demand and skips the consent screen.
+
+- `GET /api/oauth/config` (unauthenticated) → `{ clientId, authorizeUrl, tokenUrl, scopes }`.
+- The app opens `authorizeUrl` in the browser; after login the server redirects to
+  `notefix://auth?code=…&state=…`, which the app exchanges at the token endpoint
+  (verifying its PKCE `state`) and stores in the OS keychain.
+
 ## Out of scope (later packages)
 
 - Image sync (upload/download/storage) — **S2b**
