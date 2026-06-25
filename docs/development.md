@@ -26,16 +26,23 @@ ddev exec vendor/bin/phpstan analyse  # Larastan
 ## Stack
 
 - Laravel 13 · PHP 8.3 · MariaDB (via DDEV)
-- Auth: Laravel Passport (OAuth2 + PKCE) — for the desktop app's browser login flow
+- Web auth: Laravel **Fortify** — registration, login, password reset, TOTP two-factor (Notefix-styled views)
+- API auth: Laravel **Passport** (OAuth2 + PKCE) — for the desktop app's browser login flow
 - Admin: Filament 5, at `/admin`
 - Tests: Pest · Format: Pint · Static analysis: Larastan
 
+## Web & auth
+
+- Branded landing at `/`; `/login`, `/register`, `/security` (2FA setup).
+- **Self-registration** is gated by the `registrationEnabled` setting — flip it on the Filament "Instance settings" page (`/admin/instance-settings`). When off, `/register` redirects to login and the registration POST is rejected.
+- **Two-factor (TOTP)**: users enable + confirm it on `/security` (QR + recovery codes). With the `mfaEnforced` setting on, authenticated users without confirmed 2FA are sent to `/security` until they comply.
+
 ## Data model
 
-- `users` (`is_admin` gates the admin panel)
+- `users` (`is_admin` gates the admin panel; Fortify two-factor columns)
 - `workspaces` (`personal` | `shared`, owned by a user; `sync_cursor` allocates sequence numbers)
 - `workspace_members` (role: `owner` | `editor` | `viewer`)
-- `instance_settings` (key/value, e.g. `instanceName`, `setupComplete`)
+- `instance_settings` (key/value: `instanceName`, `setupComplete`, `registrationEnabled`, `mfaEnforced`)
 - `notes` / `folders` — UUID-keyed (client-provided), `sync_seq` for ordering, soft-deleted (tombstones)
 - `revisions` — overwritten note content, kept by last-write-wins
 
