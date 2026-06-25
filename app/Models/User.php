@@ -5,6 +5,8 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Observers\UserObserver;
 use Database\Factories\UserFactory;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
@@ -19,7 +21,7 @@ use Laravel\Passport\HasApiTokens;
 #[ObservedBy([UserObserver::class])]
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements OAuthenticatable
+class User extends Authenticatable implements FilamentUser, OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
@@ -58,5 +60,13 @@ class User extends Authenticatable implements OAuthenticatable
         return $this->belongsToMany(Workspace::class, 'workspace_members')
             ->withPivot('role')
             ->withTimestamps();
+    }
+
+    /**
+     * Only admins may enter the Filament admin panel.
+     */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return (bool) $this->is_admin;
     }
 }
