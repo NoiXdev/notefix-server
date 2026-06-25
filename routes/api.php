@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ImageController;
 use App\Http\Controllers\OAuthConfigController;
 use App\Http\Controllers\SyncController;
 use App\Http\Controllers\WorkspaceController;
@@ -16,4 +17,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/workspaces', [WorkspaceController::class, 'index']);
     Route::get('/workspaces/{workspace}/changes', [SyncController::class, 'pull']);
     Route::post('/workspaces/{workspace}/changes', [SyncController::class, 'push']);
+    Route::get('/workspaces/{workspace}/images', [ImageController::class, 'index']);
+    Route::post('/workspaces/{workspace}/images', [ImageController::class, 'store']);
+    Route::get('/workspaces/{workspace}/image', [ImageController::class, 'show']);
 });
