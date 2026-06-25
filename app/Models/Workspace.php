@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\WorkspaceRole;
 use App\Enums\WorkspaceType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -48,5 +49,13 @@ class Workspace extends Model
     public function folders(): HasMany
     {
         return $this->hasMany(Folder::class);
+    }
+
+    /**
+     * This user's role in the workspace, or null if they are not a member.
+     */
+    public function memberRole(User $user): ?WorkspaceRole
+    {
+        return $this->members()->where('user_id', $user->id)->first()?->role;
     }
 }

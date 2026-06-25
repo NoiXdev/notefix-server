@@ -6,6 +6,9 @@ use App\Enums\WorkspaceRole;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property \App\Enums\WorkspaceRole $role
+ */
 class WorkspaceMember extends Model
 {
     protected $fillable = ['workspace_id', 'user_id', 'role'];
