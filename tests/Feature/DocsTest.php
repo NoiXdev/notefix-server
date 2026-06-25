@@ -41,7 +41,7 @@ it('rejects invalid credentials', function () {
 it('logs out', function () {
     $this->actingAs(User::factory()->create())
         ->post('/logout')
-        ->assertRedirect('/login');
+        ->assertRedirect('/');
 
     $this->assertGuest();
 });
