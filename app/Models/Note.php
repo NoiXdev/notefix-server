@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property Carbon|null $updated_at
+ * @property Carbon|null $due_at
  */
 class Note extends Model
 {

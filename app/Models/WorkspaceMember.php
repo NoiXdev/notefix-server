@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * @property \App\Enums\WorkspaceRole $role
+ * @property WorkspaceRole $role
  */
 class WorkspaceMember extends Model
 {

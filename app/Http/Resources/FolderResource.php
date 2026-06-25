@@ -1,0 +1,31 @@
+<?php
+
+namespace App\Http\Resources;
+
+use App\Models\Folder;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+/**
+ * @mixin Folder
+ */
+class FolderResource extends JsonResource
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'parentId' => $this->parent_id,
+            'name' => $this->name,
+            'icon' => $this->icon,
+            'color' => $this->color,
+            'sort' => $this->sort,
+            'position' => $this->position,
+            'updatedAt' => $this->updated_at?->toIso8601String(),
+            'deletedAt' => $this->deleted_at?->toIso8601String(),
+        ];
+    }
+}
