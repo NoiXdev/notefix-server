@@ -27,4 +27,12 @@ class WorkspacePolicy
             true,
         );
     }
+
+    /**
+     * Only owners may manage sharing (members + invitations).
+     */
+    public function manage(User $user, Workspace $workspace): bool
+    {
+        return $workspace->memberRole($user) === WorkspaceRole::Owner;
+    }
 }
