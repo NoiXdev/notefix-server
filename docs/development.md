@@ -117,6 +117,30 @@ verify → switch in Storage settings).
   **dedicated Portainer container** on the same image running `php artisan horizon`.
 - Dashboard at `/horizon`, gated to `is_admin` (`HorizonServiceProvider::gate`).
 
+## Deployment (Docker / Portainer)
+
+`Dockerfile` builds a single production image (serversideup/php 8.3 fpm-nginx;
+Node stage builds the Vite/Tailwind assets, Composer stage installs `--no-dev`,
+Filament assets are published at build). Build and push to Harbor, then deploy
+`docker-compose.yml` as a Portainer stack:
+
+```sh
+docker build -t harbor.cloud.noidee.dev/notefix/server:latest .   # adjust namespace
+docker push   harbor.cloud.noidee.dev/notefix/server:latest
+```
+
+The stack is self-contained: `app` (web), `horizon` (worker), `scheduler`, plus
+`mariadb` and `redis` — all three app services run the **same image** with the
+command overridden. The `app` service runs migrations + caches on first boot
+(serversideup autorun); `horizon`/`scheduler` have autorun off. It joins an
+existing external Traefik network (`proxy`) for TLS/routing. Required Portainer
+stack variables are listed at the top of `docker-compose.yml` (APP_IMAGE,
+APP_KEY, APP_URL, APP_HOST, DB_*, REDIS_PASSWORD, TRAEFIK_*). Mail and file
+storage are configured at runtime in the admin panel, so they need no env.
+
+The `app-storage` volume holds note-image blobs only when the storage disk is
+`local`; with S3 it can be dropped.
+
 ## Out of scope (later packages)
 
 - Server-side orphan-image GC (blobs of deleted notes are kept)

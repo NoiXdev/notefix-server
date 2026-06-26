@@ -1,0 +1,35 @@
+.git
+.gitignore
+.github
+.ddev
+docs/superpowers
+
+# Dependencies / build output (reinstalled/rebuilt in the image)
+vendor
+node_modules
+public/build
+public/hot
+
+# Local env + secrets (provided by the Portainer stack at runtime)
+.env
+.env.*
+!.env.example
+
+# Local runtime state
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/app/private/*
+storage/app/public/*
+database/*.sqlite
+bootstrap/cache/*.php
+
+# Tests + tooling (not needed at runtime)
+tests
+phpunit.xml
+.phpunit.result.cache
+pint.json
+phpstan.neon
+.editorconfig
+README.md

@@ -1,0 +1,162 @@
+# Notefix server — Portainer stack.
+#
+# Self-contained: app (web) + Horizon worker + scheduler + MariaDB + Redis.
+# Mail and file storage (local/S3) are configured at runtime in the admin panel
+# (encrypted in the DB), so they need no env here.
+#
+# Set these in Portainer → Stack → "Environment variables":
+#   APP_IMAGE          harbor.cloud.noidee.dev/notefix/server:<tag>   (adjust namespace)
+#   APP_KEY            base64:...   (php artisan key:generate --show)
+#   APP_URL            https://notes.example.com
+#   APP_HOST           notes.example.com           (Traefik Host rule)
+#   DB_DATABASE/USER   notefix / notefix
+#   DB_PASSWORD        <strong>
+#   DB_ROOT_PASSWORD   <strong>
+#   REDIS_PASSWORD     <strong>
+#   TRAEFIK_NETWORK    proxy        (your external Traefik network; default: proxy)
+#   TRAEFIK_CERTRESOLVER  letsencrypt
+#
+# The `proxy` network must already exist (external Traefik). First boot runs
+# migrations + caches automatically on the `app` service.
+
+x-app-environment: &app-environment
+  APP_NAME: ${APP_NAME:-Notefix}
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: ${APP_KEY:?set APP_KEY}
+  APP_URL: ${APP_URL:?set APP_URL}
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: ${LOG_LEVEL:-warning}
+  DB_CONNECTION: mariadb
+  DB_HOST: mariadb
+  DB_PORT: "3306"
+  DB_DATABASE: ${DB_DATABASE:-notefix}
+  DB_USERNAME: ${DB_USERNAME:-notefix}
+  DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+  REDIS_CLIENT: phpredis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+  QUEUE_CONNECTION: redis
+  CACHE_STORE: redis
+  SESSION_DRIVER: redis
+
+services:
+  app:
+    image: ${APP_IMAGE:?set APP_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *app-environment
+      # serversideup autorun — only the web service migrates + caches on boot.
+      AUTORUN_ENABLED: "true"
+      AUTORUN_LARAVEL_MIGRATION: "true"
+      AUTORUN_LARAVEL_MIGRATION_ISOLATION: "true"
+      AUTORUN_LARAVEL_STORAGE_LINK: "true"
+      AUTORUN_LARAVEL_CONFIG_CACHE: "true"
+      AUTORUN_LARAVEL_ROUTE_CACHE: "true"
+      AUTORUN_LARAVEL_VIEW_CACHE: "true"
+      AUTORUN_LARAVEL_EVENT_CACHE: "true"
+    volumes:
+      - app-storage:/var/www/html/storage/app
+    networks:
+      - internal
+      - proxy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-proxy}
+      - traefik.http.routers.notefix.rule=Host(`${APP_HOST:?set APP_HOST}`)
+      - traefik.http.routers.notefix.entrypoints=websecure
+      - traefik.http.routers.notefix.tls=true
+      - traefik.http.routers.notefix.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.services.notefix.loadbalancer.server.port=8080
+
+  horizon:
+    image: ${APP_IMAGE:?set APP_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["php", "/var/www/html/artisan", "horizon"]
+    stop_signal: SIGTERM
+    environment:
+      <<: *app-environment
+      AUTORUN_ENABLED: "false" # the app service already ran migrations/caches
+    volumes:
+      - app-storage:/var/www/html/storage/app
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "php", "/var/www/html/artisan", "horizon:status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  scheduler:
+    image: ${APP_IMAGE:?set APP_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["php", "/var/www/html/artisan", "schedule:work"]
+    environment:
+      <<: *app-environment
+      AUTORUN_ENABLED: "false"
+    networks:
+      - internal
+
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-notefix}
+      MARIADB_USER: ${DB_USERNAME:-notefix}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  mariadb-data:
+  redis-data:
+  app-storage: # note-image blobs when the storage disk is "local" (skip if using S3)
+
+networks:
+  internal:
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:-proxy}
