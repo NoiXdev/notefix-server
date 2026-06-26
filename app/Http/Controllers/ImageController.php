@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Image;
 use App\Models\Workspace;
 use App\Support\ImagePath;
+use App\Support\InstanceConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -42,7 +43,7 @@ class ImageController extends Controller
         abort_unless(ImagePath::isSafe($path), 422, 'unsafe path');
 
         $bytes = (string) file_get_contents($request->file('file')->getRealPath());
-        Storage::disk('local')->put("images/{$workspace->id}/{$path}", $bytes);
+        Storage::disk(InstanceConfig::storageDisk())->put("images/{$workspace->id}/{$path}", $bytes);
 
         $image = Image::firstOrNew(['workspace_id' => $workspace->id, 'path' => $path]);
         $image->size = strlen($bytes);
@@ -61,7 +62,8 @@ class ImageController extends Controller
         abort_unless(ImagePath::isSafe($path), 422, 'unsafe path');
 
         $key = "images/{$workspace->id}/{$path}";
-        abort_unless(Storage::disk('local')->exists($key), 404);
+        $disk = Storage::disk(InstanceConfig::storageDisk());
+        abort_unless($disk->exists($key), 404);
 
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         $mime = match ($ext) {
@@ -74,6 +76,6 @@ class ImageController extends Controller
             default => 'application/octet-stream',
         };
 
-        return response((string) Storage::disk('local')->get($key), 200, ['Content-Type' => $mime]);
+        return response((string) $disk->get($key), 200, ['Content-Type' => $mime]);
     }
 }

@@ -37,6 +37,12 @@ return [
 
     'mailers' => [
 
+        'postal' => [
+            'transport' => 'postal',
+            'endpoint' => env('POSTAL_ENDPOINT', ''),
+            'key' => env('POSTAL_KEY', ''),
+        ],
+
         'smtp' => [
             'transport' => 'smtp',
             'scheme' => env('MAIL_SCHEME'),

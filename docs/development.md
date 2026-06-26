@@ -90,7 +90,35 @@ PKCE (no client secret). A first-party "Notefix Desktop" Passport client with th
   `notefix://auth?code=…&state=…`, which the app exchanges at the token endpoint
   (verifying its PKCE `state`) and stores in the OS keychain.
 
+## Instance settings (admin-configurable)
+
+The Filament **Instance settings** page configures the instance at runtime,
+backed by the `instance_settings` table via `App\Support\InstanceConfig`
+(`InstanceConfigServiceProvider` applies the values over the `.env` defaults at
+boot; secret keys are encrypted at rest).
+
+- **Mail** (SA): SMTP or a self-hosted **Postal** server via its HTTP API
+  (`App\Mail\Transport\PostalTransport`, mailer `postal`). "Send test email".
+- **Storage** (SB): the note-image disk is `local` or `s3`
+  (`InstanceConfig::storageDisk()`; `ImageController` uses it). Needs
+  `league/flysystem-aws-s3-v3`. "Test storage connection".
+
+## Storage migration + Horizon (SC)
+
+Moving existing image blobs between disks (e.g. local → S3) runs **async on a
+Redis queue with Horizon**. `App\Jobs\MigrateImageStorage` (one job per `Image`,
+dispatched as a `Bus::batch`) **copies** source → target idempotently; **source
+files are kept** and the active disk is **not** switched automatically (migrate →
+verify → switch in Storage settings).
+
+- Redis: locally the `ddev/ddev-redis` add-on (host `redis`); set
+  `QUEUE_CONNECTION=redis`, `REDIS_CLIENT=phpredis`, `REDIS_HOST=redis`.
+- **Worker:** run `ddev exec php artisan horizon` locally; in production deploy a
+  **dedicated Portainer container** on the same image running `php artisan horizon`.
+- Dashboard at `/horizon`, gated to `is_admin` (`HorizonServiceProvider::gate`).
+
 ## Out of scope (later packages)
 
 - Server-side orphan-image GC (blobs of deleted notes are kept)
 - Invitations and richer sharing UX beyond the admin panel
+- Auto-deleting migration source files after a verified switch
