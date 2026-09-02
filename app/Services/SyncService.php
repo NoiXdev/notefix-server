@@ -121,8 +121,16 @@ class SyncService
             return null;
         }
 
-        // Keep the overwritten content in history when an existing note changes.
-        if ($note && array_key_exists('content', $in) && $note->content !== $in['content']) {
+        $incomingProtected = (bool) ($in['protected'] ?? false);
+
+        if ($incomingProtected) {
+            // Ciphertext must never sit next to (or after) plaintext history:
+            // drop everything recorded for this note and record nothing.
+            if ($note) {
+                Revision::where('note_id', $note->id)->delete();
+            }
+        } elseif ($note && ! $note->protected && array_key_exists('content', $in) && $note->content !== $in['content']) {
+            // Plaintext → plaintext change: keep the overwritten content.
             Revision::create([
                 'note_id' => $note->id,
                 'content' => $note->content,
@@ -136,7 +144,7 @@ class SyncService
         $note->forceFill([
             'folder_id' => $in['folderId'] ?? null,
             'content' => $in['content'] ?? $note->content ?? '',
-            'protected' => (bool) ($in['protected'] ?? false),
+            'protected' => $incomingProtected,
             'title' => (string) ($in['title'] ?? ''),
             'pinned' => $in['pinned'] ?? false,
             'archived' => $in['archived'] ?? false,
