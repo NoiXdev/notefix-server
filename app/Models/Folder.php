@@ -18,12 +18,13 @@ class Folder extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'id', 'workspace_id', 'parent_id', 'name', 'icon', 'color', 'sort', 'position', 'sync_seq', 'updated_at',
+        'id', 'workspace_id', 'parent_id', 'name', 'locked', 'icon', 'color', 'sort', 'position', 'sync_seq', 'updated_at',
     ];
 
     protected function casts(): array
     {
         return [
+            'locked' => 'boolean',
             'updated_at' => 'datetime',
             'position' => 'integer',
             'sync_seq' => 'integer',

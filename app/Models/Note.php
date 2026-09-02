@@ -20,13 +20,14 @@ class Note extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'id', 'workspace_id', 'folder_id', 'content', 'pinned', 'archived', 'color',
+        'id', 'workspace_id', 'folder_id', 'content', 'protected', 'title', 'pinned', 'archived', 'color',
         'due_at', 'position', 'sync_seq', 'updated_at', 'updated_by',
     ];
 
     protected function casts(): array
     {
         return [
+            'protected' => 'boolean',
             'pinned' => 'boolean',
             'archived' => 'boolean',
             'due_at' => 'datetime',

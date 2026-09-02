@@ -20,6 +20,8 @@ class NoteResource extends JsonResource
             'id' => $this->id,
             'folderId' => $this->folder_id,
             'content' => $this->content,
+            'protected' => $this->protected,
+            'title' => $this->title,
             'pinned' => $this->pinned,
             'archived' => $this->archived,
             'color' => $this->color,

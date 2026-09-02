@@ -95,6 +95,7 @@ class SyncService
         $folder->forceFill([
             'parent_id' => $in['parentId'] ?? null,
             'name' => $in['name'] ?? $folder->name ?? '',
+            'locked' => (bool) ($in['locked'] ?? false),
             'icon' => $in['icon'] ?? null,
             'color' => $in['color'] ?? null,
             'sort' => $in['sort'] ?? null,
@@ -135,6 +136,8 @@ class SyncService
         $note->forceFill([
             'folder_id' => $in['folderId'] ?? null,
             'content' => $in['content'] ?? $note->content ?? '',
+            'protected' => (bool) ($in['protected'] ?? false),
+            'title' => (string) ($in['title'] ?? ''),
             'pinned' => $in['pinned'] ?? false,
             'archived' => $in['archived'] ?? false,
             'color' => $in['color'] ?? null,

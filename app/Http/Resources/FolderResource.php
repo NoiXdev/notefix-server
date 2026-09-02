@@ -20,6 +20,7 @@ class FolderResource extends JsonResource
             'id' => $this->id,
             'parentId' => $this->parent_id,
             'name' => $this->name,
+            'locked' => $this->locked,
             'icon' => $this->icon,
             'color' => $this->color,
             'sort' => $this->sort,
