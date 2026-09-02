@@ -104,10 +104,10 @@ Accept: application/json</pre>
         <tr><td><code>cursor</code></td><td>Monotonic per workspace. Opaque sync position.</td></tr>
         <tr><td><code>protected</code></td><td>Note. Whether its <code>content</code> is ciphertext under the workspace vault.</td></tr>
         <tr><td><code>title</code></td><td>Note. Plaintext title shown even while the body is protected.</td></tr>
-        <tr><td><code>keyGen</code></td><td>Note. The vault generation its ciphertext is wrapped under, or null when unprotected.</td></tr>
+        <tr><td><code>keyGen</code></td><td>Note. The vault generation its ciphertext is wrapped under, or null when unprotected or not yet assigned one.</td></tr>
         <tr><td><code>locked</code></td><td>Folder. Whether notes filed under it are protected by default.</td></tr>
     </table>
-    <p><strong>Omitting <code>protected</code>, <code>title</code>, <code>keyGen</code>, or <code>locked</code> from a push means "keep the server's current value" — not "clear it".</strong> This lets an older client that has never heard of the vault re-push a note or folder (e.g. after editing an unrelated field) without unprotecting it or wiping its title. Send the field explicitly (including <code>false</code>, <code>null</code>, or <code>""</code>) to actually change it.</p>
+    <p><strong>Omitting <code>protected</code>, <code>title</code>, <code>keyGen</code>, or <code>locked</code> from a push means "keep the server's current value" — not "clear it".</strong> This lets an older client that has never heard of the vault re-push a note or folder (e.g. after editing an unrelated field) without unprotecting it or wiping its title. Send the field explicitly (including <code>false</code> or <code>""</code>) to actually change it. <code>keyGen</code> follows the same rule with one addition: since it's already nullable, an explicit <code>keyGen: null</code> on a protected note is not "absent" — it clears the stored generation (used while a client waits to be handed a wrap), whereas leaving the key out of the payload entirely keeps whatever generation the server already has.</p>
 
     <h2 id="vault">Vault</h2>
     <p>A workspace's protected-notes vault lives on the workspace as wrapped keys only — the server never sees a passphrase or an unwrapped data-encryption key (DEK). Every member may read the wraps addressed to them (via the pull envelope above); only the workspace <strong>owner</strong> may create the vault, rotate its key, or manage invites.</p>
@@ -126,7 +126,7 @@ Accept: application/json</pre>
     </div>
     <div class="endpoint">
         <span class="method get">GET</span><code>/api/workspaces/{workspace}/vault/invites/{invitation}</code>
-        <p>Fetch the attached invite wrap. Open only to the owner or the user who accepted that invitation. <code>200</code> on success, <code>404</code> otherwise (including "no wrap attached yet").</p>
+        <p>Fetch the attached invite wrap. Open only to the user who accepted that invitation — not even the owner. <code>200</code> on success, <code>403</code> for a non-member, <code>404</code> for anyone else who is a member (including the owner, and including "no wrap attached yet").</p>
     </div>
     <div class="endpoint">
         <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/invites/{invitation}/accept</code>

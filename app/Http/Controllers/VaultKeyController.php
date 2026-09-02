@@ -90,12 +90,16 @@ class VaultKeyController extends Controller
         abort_unless($invitation->isOpen(), 410, 'invitation is not open');
         $d = $request->validated();
         abort_unless((int) $d['generation'] === (int) $workspace->vault_generation, 422, 'generation mismatch');
-        $existing = WorkspaceVaultInvite::where('invitation_id', $invitation->id)->first();
-        // A wrap still at the current generation is a genuine duplicate → 409.
-        // A wrap left over from before a rotation is stale and safe to replace.
-        abort_if($existing !== null && $existing->generation >= $workspace->vault_generation, 409, 'wrap already attached');
 
-        DB::transaction(function () use ($invitation, $d, $existing) {
+        DB::transaction(function () use ($workspace, $invitation, $d) {
+            // Lock the invitation row so two concurrent attaches serialize:
+            // the second one re-reads $existing after the first commits and
+            // gets a clean 409, instead of both racing into the unique index.
+            Invitation::whereKey($invitation->id)->lockForUpdate()->firstOrFail();
+            $existing = WorkspaceVaultInvite::where('invitation_id', $invitation->id)->first();
+            // A wrap still at the current generation is a genuine duplicate → 409.
+            // A wrap left over from before a rotation is stale and safe to replace.
+            abort_if($existing !== null && $existing->generation >= $workspace->vault_generation, 409, 'wrap already attached');
             $existing?->delete();
             WorkspaceVaultInvite::create([
                 'invitation_id' => $invitation->id, 'generation' => $d['generation'],

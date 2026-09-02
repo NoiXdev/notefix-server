@@ -149,7 +149,7 @@ class SyncService
             'protected' => $incomingProtected,
             'title' => array_key_exists('title', $in) ? (string) $in['title'] : ($note->title ?? ''),
             'key_gen' => $incomingProtected
-                ? (array_key_exists('keyGen', $in) ? (int) $in['keyGen'] : $note->key_gen)
+                ? (array_key_exists('keyGen', $in) ? (isset($in['keyGen']) ? (int) $in['keyGen'] : null) : $note->key_gen)
                 : null,
             'pinned' => $in['pinned'] ?? false,
             'archived' => $in['archived'] ?? false,
