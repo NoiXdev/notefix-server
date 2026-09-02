@@ -19,7 +19,7 @@ class RotateVaultRequest extends FormRequest
         return [
             'generation' => ['required', 'integer', 'min:2'],
             'keys' => ['required', 'array', 'min:1'],
-            'keys.*.userId' => ['required', 'integer'],
+            'keys.*.userId' => ['required', 'integer', 'distinct'],
             'keys.*.kind' => ['sometimes', 'in:own,code'],
             'keys.*.kdfParams' => ['required', 'array'],
             'keys.*.dekWrapped' => ['required', 'string', 'max:4096'],

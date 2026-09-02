@@ -50,8 +50,10 @@ class SyncService
 
     /**
      * Apply a batch of client changes. Server wins on a newer stored version
-     * (last-write-wins by updatedAt); an overwritten note's previous content is
-     * kept as a revision. Returns the canonical applied entities + cursor.
+     * (last-write-wins by updatedAt); an overwritten plaintext note's previous
+     * content is kept as a revision — a protected note keeps no revisions at
+     * all, since ciphertext must never sit next to (or after) plaintext
+     * history. Returns the canonical applied entities + cursor.
      *
      * @param  array<int, array<string, mixed>>  $folders
      * @param  array<int, array<string, mixed>>  $notes
@@ -95,7 +97,7 @@ class SyncService
         $folder->forceFill([
             'parent_id' => $in['parentId'] ?? null,
             'name' => $in['name'] ?? $folder->name ?? '',
-            'locked' => (bool) ($in['locked'] ?? false),
+            'locked' => array_key_exists('locked', $in) ? (bool) $in['locked'] : ($folder->locked ?? false),
             'icon' => $in['icon'] ?? null,
             'color' => $in['color'] ?? null,
             'sort' => $in['sort'] ?? null,
@@ -121,7 +123,7 @@ class SyncService
             return null;
         }
 
-        $incomingProtected = (bool) ($in['protected'] ?? false);
+        $incomingProtected = array_key_exists('protected', $in) ? (bool) $in['protected'] : ($note !== null ? $note->protected : false);
 
         if ($incomingProtected) {
             // Ciphertext must never sit next to (or after) plaintext history:
@@ -145,8 +147,10 @@ class SyncService
             'folder_id' => $in['folderId'] ?? null,
             'content' => $in['content'] ?? $note->content ?? '',
             'protected' => $incomingProtected,
-            'title' => (string) ($in['title'] ?? ''),
-            'key_gen' => $incomingProtected && isset($in['keyGen']) ? (int) $in['keyGen'] : null,
+            'title' => array_key_exists('title', $in) ? (string) $in['title'] : ($note->title ?? ''),
+            'key_gen' => $incomingProtected
+                ? (array_key_exists('keyGen', $in) ? (int) $in['keyGen'] : $note->key_gen)
+                : null,
             'pinned' => $in['pinned'] ?? false,
             'archived' => $in['archived'] ?? false,
             'color' => $in['color'] ?? null,

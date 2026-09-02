@@ -1,12 +1,17 @@
 <?php
 
+use App\Models\Invitation;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\WorkspaceMember;
+use App\Models\WorkspaceVaultInvite;
 use App\Models\WorkspaceVaultKey;
 use App\Models\WorkspaceVaultRecovery;
 use App\Models\WorkspaceVaultRotationWrap;
+use Illuminate\Support\Str;
 use Laravel\Passport\Passport;
+
+use function Pest\Laravel\actingAs;
 
 beforeEach(fn () => Setting::put('setupComplete', 'true'));
 
@@ -146,4 +151,104 @@ it('lists members with roles for a member, and 403s a stranger', function () {
 
     Passport::actingAs($stranger);
     $this->getJson("/api/workspaces/{$ws->id}/members")->assertStatus(403);
+});
+
+it('403s an owner whose member row was deleted, on members and keys/me', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $coOwner = User::factory()->create();
+    WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $coOwner->id, 'role' => 'owner']);
+    // Simulate a stale owner_id: the row that made them a member is gone,
+    // but the workspace's owner_id column still points at them.
+    WorkspaceMember::where('workspace_id', $ws->id)->where('user_id', $owner->id)->delete();
+
+    Passport::actingAs($owner);
+    $this->getJson("/api/workspaces/{$ws->id}/members")->assertStatus(403);
+    $this->putJson("/api/workspaces/{$ws->id}/vault/keys/me", ['generation' => 1, 'kdfParams' => ['salt' => 'x'], 'dekWrapped' => 'w', 'dekCheck' => 'c'])
+        ->assertStatus(403);
+});
+
+it('rotates on exactly the member rows even when owner_id points at a removed user', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $coOwner = User::factory()->create();
+    WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $coOwner->id, 'role' => 'owner']);
+    WorkspaceMember::where('workspace_id', $ws->id)->where('user_id', $owner->id)->delete();
+    $ws->forceFill(['vault_generation' => 1])->save();
+    WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $coOwner->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $coOwner->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'r', 'dek_check' => 'c']);
+
+    Passport::actingAs($coOwner);
+    // Only $coOwner's key is supplied — the stale owner_id must not be required.
+    $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", [
+        'generation' => 2,
+        'keys' => [rotKeyFor($coOwner->id, 2, 'own')],
+        'recovery' => ['recoverySalt' => 's', 'dekWrappedRecovery' => 'r2', 'dekCheck' => 'c'],
+    ])->assertCreated()->assertJsonPath('vaultGeneration', 2);
+});
+
+it('removal deletes both the vault key and any pending rotation wrap for that member', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $mb = WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $member->id, 'role' => 'editor']);
+    $ws->forceFill(['vault_generation' => 2])->save();
+    WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $member->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
+    WorkspaceVaultRotationWrap::create(['workspace_id' => $ws->id, 'user_id' => $member->id, 'generation' => 2, 'kdf_params' => [], 'dek_wrapped' => 'code', 'dek_check' => 'c']);
+
+    actingAs($owner)->delete(route('workspaces.members.destroy', [$ws, $mb]))->assertRedirect();
+
+    expect(WorkspaceVaultKey::where('user_id', $member->id)->exists())->toBeFalse()
+        ->and(WorkspaceVaultRotationWrap::where('user_id', $member->id)->exists())->toBeFalse();
+});
+
+it('deletes stale invite wraps on rotation so the owner can attach a fresh one', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $ws->forceFill(['vault_generation' => 1])->save();
+    WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $owner->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $owner->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'r', 'dek_check' => 'c']);
+    $inv = Invitation::create(['workspace_id' => $ws->id, 'token' => Str::random(40), 'role' => 'editor', 'invited_by' => $owner->id, 'created_at' => now()]);
+    WorkspaceVaultInvite::create(['invitation_id' => $inv->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped_invite' => 'iw', 'dek_check' => 'c']);
+
+    Passport::actingAs($owner);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", [
+        'generation' => 2,
+        'keys' => [rotKeyFor($owner->id, 2, 'own')],
+        'recovery' => ['recoverySalt' => 's', 'dekWrappedRecovery' => 'r2', 'dekCheck' => 'c'],
+    ])->assertCreated();
+
+    expect(WorkspaceVaultInvite::where('invitation_id', $inv->id)->exists())->toBeFalse();
+
+    // The invitation is still open, so the owner attaches a fresh wrap for the new generation.
+    $this->postJson("/api/workspaces/{$ws->id}/vault/invites/{$inv->id}", [
+        'generation' => 2, 'kdfParams' => ['salt' => 'x'], 'dekWrapped' => 'new==', 'dekCheck' => 'c',
+    ])->assertCreated();
+});
+
+it('422s a rotation whose keys repeat a userId', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $ws->forceFill(['vault_generation' => 1])->save();
+    WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $owner->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $owner->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'r', 'dek_check' => 'c']);
+
+    Passport::actingAs($owner);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", [
+        'generation' => 2,
+        'keys' => [rotKeyFor($owner->id, 2, 'own'), rotKeyFor($owner->id, 2, 'code')],
+        'recovery' => ['recoverySalt' => 's', 'dekWrappedRecovery' => 'r2', 'dekCheck' => 'c'],
+    ])->assertStatus(422);
+});
+
+it('403s a stranger posting a recovery wrap', function () {
+    $owner = User::factory()->create();
+    $stranger = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $ws->forceFill(['vault_generation' => 1])->save();
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $owner->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'r', 'dek_check' => 'c']);
+
+    Passport::actingAs($stranger);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 1, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'r2', 'dekCheck' => 'c'])
+        ->assertStatus(403);
 });

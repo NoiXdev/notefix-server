@@ -22,6 +22,7 @@
         .method { display: inline-block; font-weight: 700; font-size: .8rem; padding: .15rem .5rem; border-radius: 5px; margin-right: .5rem; }
         .get { background: #dcfce7; color: #166534; }
         .post { background: #ffedd5; color: #9a3412; }
+        .put { background: #dbeafe; color: #1e40af; }
         .endpoint { background: #fff; border: 1px solid #e7e5e4; border-radius: 10px; padding: 1rem 1.25rem; margin: .75rem 0; }
         .logout { font-size: .85rem; }
         .logout button { background: none; border: 1px solid #d6d3d1; border-radius: 6px; padding: .3rem .7rem; cursor: pointer; color: inherit; }
@@ -52,18 +53,32 @@ Accept: application/json</pre>
     <h3>Response</h3>
     <pre>{
   "cursor": 42,
+  "vaultGeneration": 2,
+  "vaultRotationPending": false,
+  "vaultKeys": {
+    "mine": [
+      { "generation": 1, "kdfParams": {}, "dekWrapped": "...", "dekCheck": "..." }
+    ],
+    "recovery": [
+      { "generation": 1, "recoverySalt": "...", "dekWrappedRecovery": "...", "dekCheck": "..." }
+    ],
+    "rotation": [
+      { "generation": 2, "kdfParams": {}, "dekWrapped": "...", "dekCheck": "..." }
+    ]
+  },
   "folders": [
-    { "id": "uuid", "parentId": null, "name": "Work", "icon": null,
+    { "id": "uuid", "parentId": null, "name": "Work", "locked": false, "icon": null,
       "color": null, "sort": null, "position": 0,
       "updatedAt": "2026-06-25T09:00:00+00:00", "deletedAt": null }
   ],
   "notes": [
     { "id": "uuid", "folderId": "uuid", "content": "&lt;p&gt;Hi&lt;/p&gt;",
+      "protected": false, "title": "", "keyGen": null,
       "pinned": false, "archived": false, "color": null, "dueAt": null,
       "position": 0, "updatedAt": "2026-06-25T09:00:00+00:00", "deletedAt": null }
   ]
 }</pre>
-    <p>Store <code>cursor</code> and pass it as <code>since</code> on the next pull.</p>
+    <p>Store <code>cursor</code> and pass it as <code>since</code> on the next pull. <code>vaultGeneration</code> and <code>vaultRotationPending</code> reflect the workspace's protected-notes vault (see <a href="#vault">Vault</a> below); <code>vaultKeys</code> holds only the wraps that belong to the caller — their own key per generation they hold (<code>mine</code>), any recovery wraps they created (<code>recovery</code>), and any rotation wraps waiting for them to convert into a key of their own (<code>rotation</code>).</p>
 
     <h2>Push changes</h2>
     <div class="endpoint">
@@ -79,7 +94,7 @@ Accept: application/json</pre>
   ],
   "folders": []
 }</pre>
-    <p>The response mirrors the pull shape: the canonical applied entities plus the new <code>cursor</code>. A push whose <code>updatedAt</code> is older than the server's stored version is ignored (server wins), and the replaced note content is kept as a revision.</p>
+    <p>The response mirrors the pull shape: the canonical applied entities plus the new <code>cursor</code>. A push whose <code>updatedAt</code> is older than the server's stored version is ignored (server wins). An overwritten <em>unprotected</em> note's previous content is kept as a revision — a protected note keeps none, since ciphertext must never sit next to (or after) plaintext history.</p>
 
     <h2>Fields</h2>
     <table>
@@ -87,7 +102,52 @@ Accept: application/json</pre>
         <tr><td><code>updatedAt</code></td><td>ISO 8601. Drives last-write-wins.</td></tr>
         <tr><td><code>deletedAt</code></td><td>ISO 8601 or null. Non-null = tombstone.</td></tr>
         <tr><td><code>cursor</code></td><td>Monotonic per workspace. Opaque sync position.</td></tr>
+        <tr><td><code>protected</code></td><td>Note. Whether its <code>content</code> is ciphertext under the workspace vault.</td></tr>
+        <tr><td><code>title</code></td><td>Note. Plaintext title shown even while the body is protected.</td></tr>
+        <tr><td><code>keyGen</code></td><td>Note. The vault generation its ciphertext is wrapped under, or null when unprotected.</td></tr>
+        <tr><td><code>locked</code></td><td>Folder. Whether notes filed under it are protected by default.</td></tr>
     </table>
+    <p><strong>Omitting <code>protected</code>, <code>title</code>, <code>keyGen</code>, or <code>locked</code> from a push means "keep the server's current value" — not "clear it".</strong> This lets an older client that has never heard of the vault re-push a note or folder (e.g. after editing an unrelated field) without unprotecting it or wiping its title. Send the field explicitly (including <code>false</code>, <code>null</code>, or <code>""</code>) to actually change it.</p>
+
+    <h2 id="vault">Vault</h2>
+    <p>A workspace's protected-notes vault lives on the workspace as wrapped keys only — the server never sees a passphrase or an unwrapped data-encryption key (DEK). Every member may read the wraps addressed to them (via the pull envelope above); only the workspace <strong>owner</strong> may create the vault, rotate its key, or manage invites.</p>
+
+    <div class="endpoint">
+        <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault</code>
+        <p>Create the vault (generation 1) with the caller's wrapped key and the recovery wrap. Owner only. <code>201</code> on success, <code>403</code> for anyone but the owner, <code>409</code> if a vault already exists, <code>422</code> if <code>recovery.recoverySalt</code>/<code>dekWrappedRecovery</code>/<code>dekCheck</code> are missing.</p>
+    </div>
+    <div class="endpoint">
+        <span class="method put">PUT</span><code>/api/workspaces/{workspace}/vault/keys/me</code>
+        <p>Replace the caller's own wrapped key for a generation, or convert a rotation wrap addressed to them into one. Any member. <code>200</code> on success, <code>404</code> if they hold neither a key nor a rotation wrap for that generation.</p>
+    </div>
+    <div class="endpoint">
+        <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/invites/{invitation}</code>
+        <p>Attach an invite-wrapped key to an open invitation, for the invitee to pick up once they accept. Owner only. <code>201</code> on success, <code>404</code> if the invitation isn't this workspace's, <code>410</code> if it's closed (accepted or expired), <code>422</code> if the generation doesn't match the vault's current one, <code>409</code> if a wrap is already attached at the current generation (a wrap left over from before a rotation is replaced instead).</p>
+    </div>
+    <div class="endpoint">
+        <span class="method get">GET</span><code>/api/workspaces/{workspace}/vault/invites/{invitation}</code>
+        <p>Fetch the attached invite wrap. Open only to the owner or the user who accepted that invitation. <code>200</code> on success, <code>404</code> otherwise (including "no wrap attached yet").</p>
+    </div>
+    <div class="endpoint">
+        <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/invites/{invitation}/accept</code>
+        <p>Consume the invite wrap and store the invitee's own wrapped key in its place. Only the user who accepted that invitation. <code>201</code> on success, <code>404</code> if there's no wrap or the caller isn't the invitee, <code>422</code> on a generation mismatch.</p>
+    </div>
+    <div class="endpoint">
+        <span class="method get">GET</span><code>/api/workspaces/{workspace}/vault/invites/by-token/{token}</code>
+        <p>Resolve an invite token (the only part of an invitation a user ever sees) to its numeric id. Open only to the owner or the accepting invitee. <code>200</code> with <code>{ "invitationId": 1 }</code>, <code>404</code> otherwise — deliberately, not <code>403</code>, so this can't be used to probe which tokens exist.</p>
+    </div>
+    <div class="endpoint">
+        <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/rotate</code>
+        <p>Advance the vault to a new generation: an own key for the rotator, rotation-wrapped keys (<code>kind: "code"</code>) for every other current member, and optionally a new recovery wrap. Owner only. <code>201</code> on success. <code>422</code> if <code>generation</code> isn't exactly one past the current generation, if the supplied keys don't cover exactly the current members (one per member, no repeats), or if the vault's creator is rotating without supplying a recovery wrap. Any invite wrap left over from an earlier generation is deleted as part of the rotation.</p>
+    </div>
+    <div class="endpoint">
+        <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/recovery</code>
+        <p>Add the missing recovery wrap for a generation after the fact (the vault creator's recovery key isn't available to whoever else performed the rotation). Only the vault's original creator. <code>201</code> on success, <code>403</code> for anyone else, <code>422</code> if the generation is ahead of the vault's current one, <code>409</code> if a recovery wrap already exists for it.</p>
+    </div>
+    <div class="endpoint">
+        <span class="method get">GET</span><code>/api/workspaces/{workspace}/members</code>
+        <p>List every member with their role, so a client can compute the key set a rotation must cover. Any member. <code>200</code> on success, <code>403</code> for a non-member.</p>
+    </div>
 </div>
 </body>
 </html>

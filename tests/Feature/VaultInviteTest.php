@@ -54,3 +54,36 @@ it('refuses attaching to a closed invitation and accepting by the wrong user', f
     $this->getJson("/api/workspaces/{$ws->id}/vault/invites/{$open->id}")->assertNotFound();
     $this->postJson("/api/workspaces/{$ws->id}/vault/invites/{$open->id}/accept", inviteWrap())->assertNotFound();
 });
+
+it('403s a member who is not an owner attaching an invite wrap', function () {
+    $owner = User::factory()->create();
+    $editor = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $ws->forceFill(['vault_generation' => 1])->save();
+    WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $editor->id, 'role' => 'editor']);
+    $inv = Invitation::create(['workspace_id' => $ws->id, 'token' => Str::random(40), 'role' => 'viewer', 'invited_by' => $owner->id, 'created_at' => now()]);
+
+    Passport::actingAs($editor);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/invites/{$inv->id}", inviteWrap())->assertStatus(403);
+});
+
+it('replaces a wrap left over from before a rotation, but still 409s one at the current generation', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $ws->forceFill(['vault_generation' => 1])->save();
+    $inv = Invitation::create(['workspace_id' => $ws->id, 'token' => Str::random(40), 'role' => 'editor', 'invited_by' => $owner->id, 'created_at' => now()]);
+
+    Passport::actingAs($owner);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/invites/{$inv->id}", inviteWrap(1))->assertCreated();
+
+    // The workspace rotates past generation 1 (independent of attachInvite's own logic).
+    $ws->forceFill(['vault_generation' => 2])->save();
+
+    // The generation-1 wrap is now stale — attaching a generation-2 wrap replaces it.
+    $this->postJson("/api/workspaces/{$ws->id}/vault/invites/{$inv->id}", inviteWrap(2))->assertCreated();
+    expect(WorkspaceVaultInvite::where('invitation_id', $inv->id)->count())->toBe(1)
+        ->and(WorkspaceVaultInvite::where('invitation_id', $inv->id)->value('generation'))->toBe(2);
+
+    // A second attach at the now-current generation is a genuine duplicate.
+    $this->postJson("/api/workspaces/{$ws->id}/vault/invites/{$inv->id}", inviteWrap(2))->assertStatus(409);
+});

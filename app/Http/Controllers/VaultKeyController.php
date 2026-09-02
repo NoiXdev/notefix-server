@@ -24,16 +24,14 @@ class VaultKeyController extends Controller
 {
     public static function authorizeMember(Workspace $workspace, User $user): void
     {
-        $isMember = $workspace->owner_id === $user->id
-            || $workspace->members()->where('user_id', $user->id)->exists();
-        abort_unless($isMember, 403);
+        abort_unless($workspace->memberRole($user) !== null, 403);
     }
 
     public function create(CreateVaultRequest $request, Workspace $workspace): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
-        self::authorizeMember($workspace, $user);
+        Gate::authorize('manage', $workspace);
         $d = $request->validated();
 
         return DB::transaction(function () use ($workspace, $user, $d) {
@@ -92,11 +90,18 @@ class VaultKeyController extends Controller
         abort_unless($invitation->isOpen(), 410, 'invitation is not open');
         $d = $request->validated();
         abort_unless((int) $d['generation'] === (int) $workspace->vault_generation, 422, 'generation mismatch');
-        abort_if(WorkspaceVaultInvite::where('invitation_id', $invitation->id)->exists(), 409, 'wrap already attached');
-        WorkspaceVaultInvite::create([
-            'invitation_id' => $invitation->id, 'generation' => $d['generation'],
-            'kdf_params' => $d['kdfParams'], 'dek_wrapped_invite' => $d['dekWrapped'], 'dek_check' => $d['dekCheck'],
-        ]);
+        $existing = WorkspaceVaultInvite::where('invitation_id', $invitation->id)->first();
+        // A wrap still at the current generation is a genuine duplicate → 409.
+        // A wrap left over from before a rotation is stale and safe to replace.
+        abort_if($existing !== null && $existing->generation >= $workspace->vault_generation, 409, 'wrap already attached');
+
+        DB::transaction(function () use ($invitation, $d, $existing) {
+            $existing?->delete();
+            WorkspaceVaultInvite::create([
+                'invitation_id' => $invitation->id, 'generation' => $d['generation'],
+                'kdf_params' => $d['kdfParams'], 'dek_wrapped_invite' => $d['dekWrapped'], 'dek_check' => $d['dekCheck'],
+            ]);
+        });
 
         return response()->json(['ok' => true], 201);
     }
@@ -177,7 +182,7 @@ class VaultKeyController extends Controller
             $locked = Workspace::whereKey($workspace->id)->lockForUpdate()->firstOrFail();
             abort_unless((int) $d['generation'] === $locked->vault_generation + 1, 422, 'stale generation');
 
-            $current = $locked->members()->pluck('user_id')->push($locked->owner_id)
+            $current = $locked->members()->pluck('user_id')
                 ->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
             $given = collect($d['keys'])->pluck('userId')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
             abort_unless($current === $given, 422, 'keys must cover exactly the current members');
@@ -185,6 +190,15 @@ class VaultKeyController extends Controller
             $creator = WorkspaceVaultRecovery::where('workspace_id', $locked->id)->where('generation', 1)->value('created_by');
             $creator = $creator === null ? null : (int) $creator;
             abort_if($creator === $user->id && empty($d['recovery']), 422, 'the vault creator must supply the recovery wrap');
+
+            // An invite wrap attached at an older generation is superseded by
+            // this rotation: without cleanup the invitee would join on a key
+            // nobody can hand them a path forward from.
+            WorkspaceVaultInvite::where('generation', '<', $d['generation'])
+                ->whereIn('invitation_id', function ($q) use ($locked) {
+                    $q->select('id')->from('invitations')->where('workspace_id', $locked->id);
+                })
+                ->delete();
 
             foreach ($d['keys'] as $k) {
                 $attrs = [
