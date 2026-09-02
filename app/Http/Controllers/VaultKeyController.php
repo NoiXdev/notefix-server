@@ -6,6 +6,7 @@ use App\Http\Requests\AcceptInviteWrapRequest;
 use App\Http\Requests\AttachInviteWrapRequest;
 use App\Http\Requests\CreateVaultRequest;
 use App\Http\Requests\PutMyVaultKeyRequest;
+use App\Http\Requests\RotateVaultRequest;
 use App\Models\Invitation;
 use App\Models\User;
 use App\Models\Workspace;
@@ -121,6 +122,46 @@ class VaultKeyController extends Controller
             $w->delete();
 
             return response()->json(['ok' => true], 201);
+        });
+    }
+
+    public function rotate(RotateVaultRequest $request, Workspace $workspace): JsonResponse
+    {
+        Gate::authorize('manage', $workspace);
+        /** @var User $user */
+        $user = $request->user();
+        $d = $request->validated();
+
+        return DB::transaction(function () use ($workspace, $user, $d) {
+            $locked = Workspace::whereKey($workspace->id)->lockForUpdate()->firstOrFail();
+            abort_unless((int) $d['generation'] === $locked->vault_generation + 1, 422, 'stale generation');
+
+            $current = $locked->members()->pluck('user_id')->push($locked->owner_id)
+                ->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
+            $given = collect($d['keys'])->pluck('userId')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
+            abort_unless($current === $given, 422, 'keys must cover exactly the current members');
+
+            $creator = WorkspaceVaultRecovery::where('workspace_id', $locked->id)->where('generation', 1)->value('created_by');
+            $creator = $creator === null ? null : (int) $creator;
+            abort_if($creator === $user->id && empty($d['recovery']), 422, 'the vault creator must supply the recovery wrap');
+
+            foreach ($d['keys'] as $k) {
+                WorkspaceVaultKey::create([
+                    'workspace_id' => $locked->id, 'user_id' => (int) $k['userId'], 'generation' => $d['generation'],
+                    'kdf_params' => $k['kdfParams'], 'dek_wrapped' => $k['dekWrapped'], 'dek_check' => $k['dekCheck'],
+                ]);
+            }
+            if (! empty($d['recovery'])) {
+                WorkspaceVaultRecovery::create([
+                    'workspace_id' => $locked->id, 'generation' => $d['generation'], 'created_by' => $creator ?? $user->id,
+                    'recovery_salt' => $d['recovery']['recoverySalt'],
+                    'dek_wrapped_recovery' => $d['recovery']['dekWrappedRecovery'],
+                    'dek_check' => $d['recovery']['dekCheck'],
+                ]);
+            }
+            $locked->forceFill(['vault_generation' => $d['generation'], 'vault_rotation_pending' => false])->save();
+
+            return response()->json(['vaultGeneration' => $d['generation']], 201);
         });
     }
 }
