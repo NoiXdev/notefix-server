@@ -92,6 +92,29 @@ class VaultKeyController extends Controller
         return $wrap;
     }
 
+    /**
+     * Map an invitation token — the only part of an invitation a user ever
+     * sees, since the share link is `/invite/{token}` — to the numeric id the
+     * other vault-invite endpoints are keyed by.
+     *
+     * Deliberately open only to the two parties who already hold the token:
+     * the workspace owner (who created the link) and the invitee who accepted
+     * it. Any other member gets a 404 rather than a 403, so this cannot be
+     * used to probe which tokens exist.
+     */
+    public function resolveInvite(Request $request, Workspace $workspace, string $token): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        self::authorizeMember($workspace, $user);
+        $invitation = Invitation::where('workspace_id', $workspace->id)->where('token', $token)->first();
+        abort_if($invitation === null, 404);
+        $allowed = Gate::forUser($user)->allows('manage', $workspace) || $invitation->accepted_by === $user->id;
+        abort_unless($allowed, 404);
+
+        return response()->json(['invitationId' => (int) $invitation->id]);
+    }
+
     public function showInvite(Request $request, Workspace $workspace, Invitation $invitation): JsonResponse
     {
         /** @var User $user */
