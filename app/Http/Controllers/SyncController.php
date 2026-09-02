@@ -22,9 +22,12 @@ class SyncController extends Controller
         Gate::authorize('view', $workspace);
 
         $result = $this->sync->pull($workspace, $request->integer('since'));
+        $workspace->refresh();
 
         return [
             'cursor' => $result['cursor'],
+            'vaultGeneration' => (int) $workspace->vault_generation,
+            'vaultRotationPending' => (bool) $workspace->vault_rotation_pending,
             'folders' => FolderResource::collection($result['folders']),
             'notes' => NoteResource::collection($result['notes']),
         ];
@@ -57,9 +60,12 @@ class SyncController extends Controller
             $request->input('folders', []),
             $request->input('notes', []),
         );
+        $workspace->refresh();
 
         return [
             'cursor' => $result['cursor'],
+            'vaultGeneration' => (int) $workspace->vault_generation,
+            'vaultRotationPending' => (bool) $workspace->vault_rotation_pending,
             'folders' => FolderResource::collection($result['folders']),
             'notes' => NoteResource::collection($result['notes']),
         ];

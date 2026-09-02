@@ -10,12 +10,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Workspace extends Model
 {
-    protected $fillable = ['name', 'owner_id', 'type'];
+    protected $fillable = ['name', 'owner_id', 'type', 'vault_generation', 'vault_rotation_pending'];
 
     protected function casts(): array
     {
         return [
             'type' => WorkspaceType::class,
+            'vault_generation' => 'integer',
+            'vault_rotation_pending' => 'boolean',
         ];
     }
 

@@ -146,6 +146,7 @@ class SyncService
             'content' => $in['content'] ?? $note->content ?? '',
             'protected' => $incomingProtected,
             'title' => (string) ($in['title'] ?? ''),
+            'key_gen' => $incomingProtected && isset($in['keyGen']) ? (int) $in['keyGen'] : null,
             'pinned' => $in['pinned'] ?? false,
             'archived' => $in['archived'] ?? false,
             'color' => $in['color'] ?? null,

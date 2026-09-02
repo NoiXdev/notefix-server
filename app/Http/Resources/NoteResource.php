@@ -22,6 +22,7 @@ class NoteResource extends JsonResource
             'content' => $this->content,
             'protected' => $this->protected,
             'title' => $this->title,
+            'keyGen' => $this->key_gen,
             'pinned' => $this->pinned,
             'archived' => $this->archived,
             'color' => $this->color,
