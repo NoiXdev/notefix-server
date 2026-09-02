@@ -28,4 +28,6 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/workspaces/{workspace}/vault/invites/{invitation}', [VaultKeyController::class, 'showInvite']);
     Route::post('/workspaces/{workspace}/vault/invites/{invitation}/accept', [VaultKeyController::class, 'acceptInvite']);
     Route::post('/workspaces/{workspace}/vault/rotate', [VaultKeyController::class, 'rotate']);
+    Route::post('/workspaces/{workspace}/vault/recovery', [VaultKeyController::class, 'putRecovery']);
+    Route::get('/workspaces/{workspace}/members', [VaultKeyController::class, 'members']);
 });

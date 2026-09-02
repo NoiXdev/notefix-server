@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceVaultKey;
 use App\Models\WorkspaceVaultRecovery;
+use App\Models\WorkspaceVaultRotationWrap;
 use App\Services\SyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -39,7 +40,7 @@ class SyncController extends Controller
         ];
     }
 
-    /** @return array{mine: list<array<string,mixed>>, recovery: list<array<string,mixed>>} */
+    /** @return array{mine: list<array<string,mixed>>, recovery: list<array<string,mixed>>, rotation: list<array<string,mixed>>} */
     private function vaultKeysFor(Workspace $workspace, User $user): array
     {
         $mine = $workspace->vaultKeys()->where('user_id', $user->id)->orderBy('generation')->get()
@@ -52,8 +53,13 @@ class SyncController extends Controller
                 'generation' => $r->generation, 'recoverySalt' => $r->recovery_salt,
                 'dekWrappedRecovery' => $r->dek_wrapped_recovery, 'dekCheck' => $r->dek_check,
             ])->values()->all();
+        $rotation = $workspace->vaultRotationWraps()->where('user_id', $user->id)->orderBy('generation')->get()
+            ->map(fn (WorkspaceVaultRotationWrap $w) => [
+                'generation' => $w->generation, 'kdfParams' => $w->kdf_params,
+                'dekWrapped' => $w->dek_wrapped, 'dekCheck' => $w->dek_check,
+            ])->values()->all();
 
-        return ['mine' => $mine, 'recovery' => $recovery];
+        return ['mine' => $mine, 'recovery' => $recovery, 'rotation' => $rotation];
     }
 
     /**

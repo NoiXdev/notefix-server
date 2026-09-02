@@ -78,6 +78,14 @@ class Workspace extends Model
     }
 
     /**
+     * @return HasMany<WorkspaceVaultRotationWrap, $this>
+     */
+    public function vaultRotationWraps(): HasMany
+    {
+        return $this->hasMany(WorkspaceVaultRotationWrap::class);
+    }
+
+    /**
      * This user's role in the workspace, or null if they are not a member.
      */
     public function memberRole(User $user): ?WorkspaceRole

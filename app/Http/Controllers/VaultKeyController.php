@@ -6,6 +6,7 @@ use App\Http\Requests\AcceptInviteWrapRequest;
 use App\Http\Requests\AttachInviteWrapRequest;
 use App\Http\Requests\CreateVaultRequest;
 use App\Http\Requests\PutMyVaultKeyRequest;
+use App\Http\Requests\PutRecoveryWrapRequest;
 use App\Http\Requests\RotateVaultRequest;
 use App\Models\Invitation;
 use App\Models\User;
@@ -13,6 +14,7 @@ use App\Models\Workspace;
 use App\Models\WorkspaceVaultInvite;
 use App\Models\WorkspaceVaultKey;
 use App\Models\WorkspaceVaultRecovery;
+use App\Models\WorkspaceVaultRotationWrap;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -61,8 +63,24 @@ class VaultKeyController extends Controller
         $d = $request->validated();
         $key = WorkspaceVaultKey::where('workspace_id', $workspace->id)
             ->where('user_id', $user->id)->where('generation', $d['generation'])->first();
-        abort_if($key === null, 404, 'no key for that generation');
-        $key->forceFill(['kdf_params' => $d['kdfParams'], 'dek_wrapped' => $d['dekWrapped'], 'dek_check' => $d['dekCheck']])->save();
+
+        if ($key !== null) {
+            $key->forceFill(['kdf_params' => $d['kdfParams'], 'dek_wrapped' => $d['dekWrapped'], 'dek_check' => $d['dekCheck']])->save();
+
+            return response()->json(['ok' => true]);
+        }
+
+        $wrap = WorkspaceVaultRotationWrap::where('workspace_id', $workspace->id)
+            ->where('user_id', $user->id)->where('generation', $d['generation'])->first();
+        abort_if($wrap === null, 404, 'no key for that generation');
+
+        DB::transaction(function () use ($workspace, $user, $d, $wrap) {
+            WorkspaceVaultKey::create([
+                'workspace_id' => $workspace->id, 'user_id' => $user->id, 'generation' => $d['generation'],
+                'kdf_params' => $d['kdfParams'], 'dek_wrapped' => $d['dekWrapped'], 'dek_check' => $d['dekCheck'],
+            ]);
+            $wrap->delete();
+        });
 
         return response()->json(['ok' => true]);
     }
@@ -169,10 +187,15 @@ class VaultKeyController extends Controller
             abort_if($creator === $user->id && empty($d['recovery']), 422, 'the vault creator must supply the recovery wrap');
 
             foreach ($d['keys'] as $k) {
-                WorkspaceVaultKey::create([
+                $attrs = [
                     'workspace_id' => $locked->id, 'user_id' => (int) $k['userId'], 'generation' => $d['generation'],
                     'kdf_params' => $k['kdfParams'], 'dek_wrapped' => $k['dekWrapped'], 'dek_check' => $k['dekCheck'],
-                ]);
+                ];
+                if (($k['kind'] ?? 'own') === 'code') {
+                    WorkspaceVaultRotationWrap::create($attrs);
+                } else {
+                    WorkspaceVaultKey::create($attrs);
+                }
             }
             if (! empty($d['recovery'])) {
                 WorkspaceVaultRecovery::create([
@@ -186,5 +209,57 @@ class VaultKeyController extends Controller
 
             return response()->json(['vaultGeneration' => $d['generation']], 201);
         });
+    }
+
+    /**
+     * The creator's recovery wrap for a generation can arrive after the
+     * rotation itself, since a non-creator rotator never has the recovery
+     * key. Only the person who created the vault (the `created_by` of its
+     * generation-1 recovery row) may add the missing wrap, and only once per
+     * generation.
+     */
+    public function putRecovery(PutRecoveryWrapRequest $request, Workspace $workspace): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        self::authorizeMember($workspace, $user);
+        $d = $request->validated();
+
+        $creator = WorkspaceVaultRecovery::where('workspace_id', $workspace->id)->where('generation', 1)->value('created_by');
+        abort_unless($creator !== null && (int) $creator === $user->id, 403, 'only the vault creator may add a recovery wrap');
+        abort_if((int) $d['generation'] > (int) $workspace->vault_generation, 422, 'generation is ahead of the vault');
+        abort_if(
+            WorkspaceVaultRecovery::where('workspace_id', $workspace->id)->where('generation', $d['generation'])->exists(),
+            409,
+            'recovery wrap already exists for that generation',
+        );
+
+        WorkspaceVaultRecovery::create([
+            'workspace_id' => $workspace->id, 'generation' => $d['generation'], 'created_by' => $user->id,
+            'recovery_salt' => $d['recoverySalt'],
+            'dek_wrapped_recovery' => $d['dekWrappedRecovery'],
+            'dek_check' => $d['dekCheck'],
+        ]);
+
+        return response()->json(['ok' => true], 201);
+    }
+
+    /**
+     * Owner + members with their roles, so a client can build the key set a
+     * rotation must cover. Any member may read it; the owner is included
+     * through their own `workspace_members` row (every user gets one, see
+     * `UserObserver`).
+     */
+    public function members(Request $request, Workspace $workspace): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        self::authorizeMember($workspace, $user);
+
+        $members = $workspace->members()->orderBy('user_id')->get()
+            ->map(fn ($m) => ['userId' => (int) $m->user_id, 'role' => $m->role->value])
+            ->values()->all();
+
+        return response()->json(['members' => $members]);
     }
 }
