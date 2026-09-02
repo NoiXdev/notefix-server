@@ -14,7 +14,7 @@ beforeEach(function () {
 it('pulls an empty workspace', function () {
     $this->getJson("/api/workspaces/{$this->ws->id}/changes?since=0")
         ->assertOk()
-        ->assertExactJson(['cursor' => 0, 'vaultGeneration' => 0, 'vaultRotationPending' => false, 'folders' => [], 'notes' => []]);
+        ->assertExactJson(['cursor' => 0, 'vaultGeneration' => 0, 'vaultRotationPending' => false, 'vaultKeys' => ['mine' => [], 'recovery' => []], 'folders' => [], 'notes' => []]);
 });
 
 it('pushes a note and pulls it back', function () {

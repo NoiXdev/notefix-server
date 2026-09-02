@@ -6,6 +6,8 @@ use App\Http\Resources\FolderResource;
 use App\Http\Resources\NoteResource;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkspaceVaultKey;
+use App\Models\WorkspaceVaultRecovery;
 use App\Services\SyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -24,13 +26,34 @@ class SyncController extends Controller
         $result = $this->sync->pull($workspace, $request->integer('since'));
         $workspace->refresh();
 
+        /** @var User $user */
+        $user = $request->user();
+
         return [
             'cursor' => $result['cursor'],
             'vaultGeneration' => (int) $workspace->vault_generation,
             'vaultRotationPending' => (bool) $workspace->vault_rotation_pending,
+            'vaultKeys' => $this->vaultKeysFor($workspace, $user),
             'folders' => FolderResource::collection($result['folders']),
             'notes' => NoteResource::collection($result['notes']),
         ];
+    }
+
+    /** @return array{mine: list<array<string,mixed>>, recovery: list<array<string,mixed>>} */
+    private function vaultKeysFor(Workspace $workspace, User $user): array
+    {
+        $mine = $workspace->vaultKeys()->where('user_id', $user->id)->orderBy('generation')->get()
+            ->map(fn (WorkspaceVaultKey $k) => [
+                'generation' => $k->generation, 'kdfParams' => $k->kdf_params,
+                'dekWrapped' => $k->dek_wrapped, 'dekCheck' => $k->dek_check,
+            ])->values()->all();
+        $recovery = $workspace->vaultRecovery()->where('created_by', $user->id)->orderBy('generation')->get()
+            ->map(fn (WorkspaceVaultRecovery $r) => [
+                'generation' => $r->generation, 'recoverySalt' => $r->recovery_salt,
+                'dekWrappedRecovery' => $r->dek_wrapped_recovery, 'dekCheck' => $r->dek_check,
+            ])->values()->all();
+
+        return ['mine' => $mine, 'recovery' => $recovery];
     }
 
     /**

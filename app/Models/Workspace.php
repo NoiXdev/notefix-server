@@ -62,6 +62,22 @@ class Workspace extends Model
     }
 
     /**
+     * @return HasMany<WorkspaceVaultKey, $this>
+     */
+    public function vaultKeys(): HasMany
+    {
+        return $this->hasMany(WorkspaceVaultKey::class);
+    }
+
+    /**
+     * @return HasMany<WorkspaceVaultRecovery, $this>
+     */
+    public function vaultRecovery(): HasMany
+    {
+        return $this->hasMany(WorkspaceVaultRecovery::class);
+    }
+
+    /**
      * This user's role in the workspace, or null if they are not a member.
      */
     public function memberRole(User $user): ?WorkspaceRole
