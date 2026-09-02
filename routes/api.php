@@ -23,4 +23,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/workspaces/{workspace}/image', [ImageController::class, 'show']);
     Route::post('/workspaces/{workspace}/vault', [VaultKeyController::class, 'create']);
     Route::put('/workspaces/{workspace}/vault/keys/me', [VaultKeyController::class, 'putMine']);
+    Route::post('/workspaces/{workspace}/vault/invites/{invitation}', [VaultKeyController::class, 'attachInvite']);
+    Route::get('/workspaces/{workspace}/vault/invites/{invitation}', [VaultKeyController::class, 'showInvite']);
+    Route::post('/workspaces/{workspace}/vault/invites/{invitation}/accept', [VaultKeyController::class, 'acceptInvite']);
 });
