@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\WorkspaceRole;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -34,10 +35,25 @@ class Invitation extends Model
         return $this->belongsTo(Workspace::class);
     }
 
-    /** Open = not yet accepted and not past its (optional) expiry. */
+    /** Open = not yet accepted and not past its (optional) expiry. The PHP twin of the `open()` scope. */
     public function isOpen(): bool
     {
         return $this->accepted_at === null
             && ($this->expires_at === null || $this->expires_at->isFuture());
+    }
+
+    /**
+     * Open = not yet accepted and not past its (optional) expiry — the query
+     * twin of [`isOpen()`]; keep the two in step.
+     *
+     * @param  Builder<Invitation>  $query
+     * @return Builder<Invitation>
+     */
+    public function scopeOpen(Builder $query): Builder
+    {
+        return $query->whereNull('accepted_at')
+            ->where(function (Builder $q) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            });
     }
 }

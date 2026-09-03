@@ -84,12 +84,7 @@ class SyncController extends Controller
         if (! $isOwner || (int) $workspace->vault_generation === 0) {
             return [];
         }
-        $open = $workspace->invitations()
-            ->whereNull('accepted_at')
-            ->where(function ($q) {
-                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
-            })
-            ->orderBy('id')->get();
+        $open = $workspace->invitations()->open()->orderBy('id')->get();
         $wraps = WorkspaceVaultInvite::whereIn('invitation_id', $open->pluck('id'))->pluck('generation', 'invitation_id');
 
         return $open->map(fn (Invitation $i) => [

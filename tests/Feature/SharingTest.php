@@ -5,6 +5,7 @@ use App\Models\Invitation;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\WorkspaceMember;
+use Illuminate\Support\Str;
 
 beforeEach(fn () => Setting::put('setupComplete', 'true'));
 
@@ -76,6 +77,22 @@ it('renders the share page for the owner and forbids others', function () {
     $ws = $owner->ownedWorkspaces->first();
     $this->actingAs($owner)->get("/workspaces/{$ws->id}/share")->assertOk();
     $this->actingAs(User::factory()->create())->get("/workspaces/{$ws->id}/share")->assertForbidden();
+});
+
+it('lists only open invitations on the share page', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    $mk = fn (array $a) => Invitation::create(array_merge(
+        ['workspace_id' => $ws->id, 'token' => Str::random(40), 'role' => 'editor', 'invited_by' => $owner->id, 'created_at' => now()],
+        $a,
+    ));
+    $open = $mk(['expires_at' => now()->addDay()]);
+    $never = $mk([]);
+    $mk(['expires_at' => now()->subDay()]);
+    $mk(['accepted_at' => now(), 'accepted_by' => $owner->id]);
+
+    $this->actingAs($owner)->get("/workspaces/{$ws->id}/share")->assertOk()
+        ->assertViewHas('invitations', fn ($list) => $list->pluck('id')->sort()->values()->all() === collect([$open->id, $never->id])->sort()->values()->all());
 });
 
 it('accepts an open invite, creating a membership and consuming it', function () {

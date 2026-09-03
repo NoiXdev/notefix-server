@@ -33,7 +33,7 @@ class WorkspaceSharingController extends Controller
         return view('workspaces.share', [
             'workspace' => $workspace,
             'members' => $workspace->members()->with('user')->get(),
-            'invitations' => $workspace->invitations()->whereNull('accepted_at')->get(),
+            'invitations' => $workspace->invitations()->open()->get(),
             'roles' => WorkspaceRole::cases(),
         ]);
     }

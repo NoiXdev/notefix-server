@@ -272,6 +272,9 @@ it('deletes stale invite wraps on rotation so the owner can attach a fresh one',
     $accepted = Invitation::create(['workspace_id' => $ws->id, 'token' => Str::random(40), 'role' => 'editor', 'invited_by' => $owner->id, 'created_at' => now(), 'accepted_at' => now(), 'accepted_by' => $joined->id]);
     WorkspaceVaultInvite::create(['invitation_id' => $accepted->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped_invite' => 'kept', 'dek_check' => 'c']);
 
+    $expired = Invitation::create(['workspace_id' => $ws->id, 'token' => Str::random(40), 'role' => 'viewer', 'invited_by' => $owner->id, 'created_at' => now(), 'expires_at' => now()->subDay()]);
+    WorkspaceVaultInvite::create(['invitation_id' => $expired->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped_invite' => 'stale-but-kept', 'dek_check' => 'c']);
+
     Passport::actingAs($owner);
     $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", [
         'generation' => 2,
@@ -281,6 +284,9 @@ it('deletes stale invite wraps on rotation so the owner can attach a fresh one',
 
     expect(WorkspaceVaultInvite::where('invitation_id', $inv->id)->exists())->toBeFalse()
         ->and(WorkspaceVaultInvite::where('invitation_id', $accepted->id)->value('dek_wrapped_invite'))->toBe('kept');
+
+    // Expired is not open: the rotation leaves its wrap alone; the prune removes it a week after expiry.
+    expect(WorkspaceVaultInvite::where('invitation_id', $expired->id)->value('dek_wrapped_invite'))->toBe('stale-but-kept');
 
     // The invitation is still open, so the owner attaches a fresh wrap for the new generation.
     $this->postJson("/api/workspaces/{$ws->id}/vault/invites/{$inv->id}", [

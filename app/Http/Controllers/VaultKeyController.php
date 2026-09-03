@@ -201,16 +201,10 @@ class VaultKeyController extends Controller
             // rotation — but only for invitations still OPEN. An accepted
             // invitee is a member now: they get the new generation through
             // their rotation code, and their old wrap still opens the notes
-            // sealed before it.
+            // sealed before it. Expired invitations are not open either —
+            // their wrap stays until the prune removes them.
             WorkspaceVaultInvite::where('generation', '<', $d['generation'])
-                ->whereIn('invitation_id', function ($q) use ($locked) {
-                    $q->select('id')->from('invitations')
-                        ->where('workspace_id', $locked->id)
-                        ->whereNull('accepted_at')
-                        ->where(function ($q) {
-                            $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
-                        });
-                })
+                ->whereIn('invitation_id', Invitation::query()->open()->where('workspace_id', $locked->id)->select('id'))
                 ->delete();
 
             foreach ($d['keys'] as $k) {
