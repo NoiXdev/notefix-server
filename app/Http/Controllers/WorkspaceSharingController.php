@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceMember;
 use App\Models\WorkspaceVaultKey;
+use App\Models\WorkspaceVaultRecovery;
 use App\Models\WorkspaceVaultRotationWrap;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -100,6 +101,7 @@ class WorkspaceSharingController extends Controller
         if ($workspace->vault_generation > 0) {
             WorkspaceVaultKey::where('workspace_id', $workspace->id)->where('user_id', $member->user_id)->delete();
             WorkspaceVaultRotationWrap::where('workspace_id', $workspace->id)->where('user_id', $member->user_id)->delete();
+            WorkspaceVaultRecovery::where('workspace_id', $workspace->id)->where('created_by', $member->user_id)->delete();
             $workspace->forceFill(['vault_rotation_pending' => true])->save();
         }
 

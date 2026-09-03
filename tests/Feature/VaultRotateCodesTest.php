@@ -202,11 +202,15 @@ it('removal deletes both the vault key and any pending rotation wrap for that me
     $ws->forceFill(['vault_generation' => 2])->save();
     WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $member->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
     WorkspaceVaultRotationWrap::create(['workspace_id' => $ws->id, 'user_id' => $member->id, 'generation' => 2, 'kdf_params' => [], 'dek_wrapped' => 'code', 'dek_check' => 'c']);
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $member->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'theirs', 'dek_check' => 'c']);
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 2, 'created_by' => $owner->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'mine', 'dek_check' => 'c']);
 
     actingAs($owner)->delete(route('workspaces.members.destroy', [$ws, $mb]))->assertRedirect();
 
     expect(WorkspaceVaultKey::where('user_id', $member->id)->exists())->toBeFalse()
-        ->and(WorkspaceVaultRotationWrap::where('user_id', $member->id)->exists())->toBeFalse();
+        ->and(WorkspaceVaultRotationWrap::where('user_id', $member->id)->exists())->toBeFalse()
+        ->and(WorkspaceVaultRecovery::where('workspace_id', $ws->id)->where('created_by', $member->id)->exists())->toBeFalse()
+        ->and(WorkspaceVaultRecovery::where('workspace_id', $ws->id)->where('created_by', $owner->id)->exists())->toBeTrue();
 });
 
 it('deletes stale invite wraps on rotation so the owner can attach a fresh one', function () {
@@ -218,14 +222,22 @@ it('deletes stale invite wraps on rotation so the owner can attach a fresh one',
     $inv = Invitation::create(['workspace_id' => $ws->id, 'token' => Str::random(40), 'role' => 'editor', 'invited_by' => $owner->id, 'created_at' => now()]);
     WorkspaceVaultInvite::create(['invitation_id' => $inv->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped_invite' => 'iw', 'dek_check' => 'c']);
 
+    // Create an accepted invitation with a wrap
+    $joined = User::factory()->create();
+    WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $joined->id, 'role' => 'editor']);
+    WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $joined->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
+    $accepted = Invitation::create(['workspace_id' => $ws->id, 'token' => Str::random(40), 'role' => 'editor', 'invited_by' => $owner->id, 'created_at' => now(), 'accepted_at' => now(), 'accepted_by' => $joined->id]);
+    WorkspaceVaultInvite::create(['invitation_id' => $accepted->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped_invite' => 'kept', 'dek_check' => 'c']);
+
     Passport::actingAs($owner);
     $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", [
         'generation' => 2,
-        'keys' => [rotKeyFor($owner->id, 2, 'own')],
+        'keys' => [rotKeyFor($owner->id, 2, 'own'), rotKeyFor($joined->id, 2, 'code')],
         'recovery' => ['recoverySalt' => 's', 'dekWrappedRecovery' => 'r2', 'dekCheck' => 'c'],
     ])->assertCreated();
 
-    expect(WorkspaceVaultInvite::where('invitation_id', $inv->id)->exists())->toBeFalse();
+    expect(WorkspaceVaultInvite::where('invitation_id', $inv->id)->exists())->toBeFalse()
+        ->and(WorkspaceVaultInvite::where('invitation_id', $accepted->id)->value('dek_wrapped_invite'))->toBe('kept');
 
     // The invitation is still open, so the owner attaches a fresh wrap for the new generation.
     $this->postJson("/api/workspaces/{$ws->id}/vault/invites/{$inv->id}", [

@@ -195,12 +195,19 @@ class VaultKeyController extends Controller
             $creator = $creator === null ? null : (int) $creator;
             abort_if($creator === $user->id && empty($d['recovery']), 422, 'the vault creator must supply the recovery wrap');
 
-            // An invite wrap attached at an older generation is superseded by
-            // this rotation: without cleanup the invitee would join on a key
-            // nobody can hand them a path forward from.
+            // A wrap attached at an older generation is superseded by this
+            // rotation — but only for invitations still OPEN. An accepted
+            // invitee is a member now: they get the new generation through
+            // their rotation code, and their old wrap still opens the notes
+            // sealed before it.
             WorkspaceVaultInvite::where('generation', '<', $d['generation'])
                 ->whereIn('invitation_id', function ($q) use ($locked) {
-                    $q->select('id')->from('invitations')->where('workspace_id', $locked->id);
+                    $q->select('id')->from('invitations')
+                        ->where('workspace_id', $locked->id)
+                        ->whereNull('accepted_at')
+                        ->where(function ($q) {
+                            $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+                        });
                 })
                 ->delete();
 
