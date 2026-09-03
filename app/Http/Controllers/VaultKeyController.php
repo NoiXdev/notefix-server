@@ -15,6 +15,7 @@ use App\Models\WorkspaceVaultInvite;
 use App\Models\WorkspaceVaultKey;
 use App\Models\WorkspaceVaultRecovery;
 use App\Models\WorkspaceVaultRotationWrap;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -247,19 +248,19 @@ class VaultKeyController extends Controller
         $d = $request->validated();
 
         abort_if((int) $d['generation'] > (int) $workspace->vault_generation, 422, 'generation is ahead of the vault');
-        abort_if(
-            WorkspaceVaultRecovery::where('workspace_id', $workspace->id)
-                ->where('generation', $d['generation'])->where('created_by', $user->id)->exists(),
-            409,
-            'you already hold a recovery wrap for that generation',
-        );
 
-        WorkspaceVaultRecovery::create([
-            'workspace_id' => $workspace->id, 'generation' => $d['generation'], 'created_by' => $user->id,
-            'recovery_salt' => $d['recoverySalt'],
-            'dek_wrapped_recovery' => $d['dekWrappedRecovery'],
-            'dek_check' => $d['dekCheck'],
-        ]);
+        try {
+            WorkspaceVaultRecovery::create([
+                'workspace_id' => $workspace->id, 'generation' => $d['generation'], 'created_by' => $user->id,
+                'recovery_salt' => $d['recoverySalt'],
+                'dek_wrapped_recovery' => $d['dekWrappedRecovery'],
+                'dek_check' => $d['dekCheck'],
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            // The index (workspace, generation, holder) is the single source of
+            // truth: two identical concurrent posts end in 201 + 409, never 500.
+            abort(409, 'you already hold a recovery wrap for that generation');
+        }
 
         return response()->json(['ok' => true], 201);
     }

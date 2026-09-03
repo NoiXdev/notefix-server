@@ -12,6 +12,7 @@ use App\Models\WorkspaceVaultRecovery;
 use App\Models\WorkspaceVaultRotationWrap;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -96,14 +97,16 @@ class WorkspaceSharingController extends Controller
             return back()->with('error', 'A workspace must keep at least one owner.');
         }
 
-        $member->delete();
+        DB::transaction(function () use ($workspace, $member) {
+            $member->delete();
 
-        if ($workspace->vault_generation > 0) {
-            WorkspaceVaultKey::where('workspace_id', $workspace->id)->where('user_id', $member->user_id)->delete();
-            WorkspaceVaultRotationWrap::where('workspace_id', $workspace->id)->where('user_id', $member->user_id)->delete();
-            WorkspaceVaultRecovery::where('workspace_id', $workspace->id)->where('created_by', $member->user_id)->delete();
-            $workspace->forceFill(['vault_rotation_pending' => true])->save();
-        }
+            if ($workspace->vault_generation > 0) {
+                WorkspaceVaultKey::where('workspace_id', $workspace->id)->where('user_id', $member->user_id)->delete();
+                WorkspaceVaultRotationWrap::where('workspace_id', $workspace->id)->where('user_id', $member->user_id)->delete();
+                WorkspaceVaultRecovery::where('workspace_id', $workspace->id)->where('created_by', $member->user_id)->delete();
+                $workspace->forceFill(['vault_rotation_pending' => true])->save();
+            }
+        });
 
         return back()->with('status', 'Member removed.');
     }
