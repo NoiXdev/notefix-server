@@ -142,7 +142,7 @@ Accept: application/json</pre>
     </div>
     <div class="endpoint">
         <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/recovery</code>
-        <p>Add the missing recovery wrap for a generation after the fact (the vault creator's recovery key isn't available to whoever else performed the rotation). Only the vault's original creator. <code>201</code> on success, <code>403</code> for anyone else, <code>422</code> if the generation is ahead of the vault's current one, <code>409</code> if a recovery wrap already exists for it.</p>
+        <p>Any owner. Adds the caller's own recovery wrap for a generation (one per generation and holder): <code>201</code>; <code>403</code> for non-owners; <code>409</code> when the caller already holds one; <code>422</code> when the generation is ahead of the vault.</p>
     </div>
     <div class="endpoint">
         <span class="method get">GET</span><code>/api/workspaces/{workspace}/members</code>

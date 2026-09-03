@@ -110,29 +110,49 @@ it('converts a rotation wrap into a key row on PUT keys/me, and rewraps in place
         ->and(WorkspaceVaultKey::where('workspace_id', $ws->id)->where('user_id', $member->id)->where('generation', 2)->first()->dek_wrapped)->toBe('mywrap2==');
 });
 
-it('lets only the vault creator add the missing recovery wrap for a generation, once', function () {
-    $owner = User::factory()->create();
-    $coOwner = User::factory()->create();
-    $ws = $owner->ownedWorkspaces->first();
-    WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $coOwner->id, 'role' => 'owner']);
+it('lets every owner keep their own recovery set, once per generation', function () {
+    $creator = User::factory()->create();
+    $ws = $creator->ownedWorkspaces->first();
     $ws->forceFill(['vault_generation' => 2])->save();
-    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $owner->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'r', 'dek_check' => 'c']);
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $creator->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'r1', 'dek_check' => 'c']);
+    $coOwner = User::factory()->create();
+    WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $coOwner->id, 'role' => 'owner']);
+    $editor = User::factory()->create();
+    WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $editor->id, 'role' => 'editor']);
 
-    // Non-creator (co-owner) → 403.
+    Passport::actingAs($editor);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 1, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'e', 'dekCheck' => 'c'])->assertStatus(403);
+
     Passport::actingAs($coOwner);
-    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 2, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'r2', 'dekCheck' => 'c'])->assertStatus(403);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 3, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'x', 'dekCheck' => 'c'])->assertStatus(422);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 1, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'co1', 'dekCheck' => 'c'])->assertCreated();
+    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 2, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'co2', 'dekCheck' => 'c'])->assertCreated();
+    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 1, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'again', 'dekCheck' => 'c'])->assertStatus(409);
 
-    Passport::actingAs($owner);
-    // Generation beyond the current vault generation → 422.
-    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 3, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'r3', 'dekCheck' => 'c'])->assertStatus(422);
+    // Both owners' rows coexist per generation, and each pull shows only its own.
+    expect(WorkspaceVaultRecovery::where('workspace_id', $ws->id)->where('generation', 1)->count())->toBe(2);
+    $mine = $this->getJson("/api/workspaces/{$ws->id}/changes?since=0")->assertOk()->json('vaultKeys.recovery');
+    expect(collect($mine)->pluck('dekWrappedRecovery')->all())->toBe(['co1', 'co2']);
+});
 
-    // Creator, valid generation → 201.
-    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 2, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'r2', 'dekCheck' => 'c'])
-        ->assertCreated()->assertJson(['ok' => true]);
-    expect(WorkspaceVaultRecovery::where('workspace_id', $ws->id)->where('generation', 2)->value('created_by'))->toBe($owner->id);
+it('requires the recovery wrap on rotation only from a recovery holder', function () {
+    $creator = User::factory()->create();
+    $ws = $creator->ownedWorkspaces->first();
+    $ws->forceFill(['vault_generation' => 1])->save();
+    WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $creator->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $creator->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'r1', 'dek_check' => 'c']);
+    $coOwner = User::factory()->create();
+    WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $coOwner->id, 'role' => 'owner']);
+    WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $coOwner->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
 
-    // Duplicate for the same generation → 409.
-    $this->postJson("/api/workspaces/{$ws->id}/vault/recovery", ['generation' => 2, 'recoverySalt' => 's', 'dekWrappedRecovery' => 'r2b', 'dekCheck' => 'c'])->assertStatus(409);
+    // The co-owner holds no recovery set: null is fine.
+    Passport::actingAs($coOwner);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", ['generation' => 2, 'keys' => [rotKeyFor($coOwner->id, 2, 'own'), rotKeyFor($creator->id, 2, 'code')], 'recovery' => null])->assertCreated();
+    // The creator holds one: the wrap is required, and the row is theirs.
+    Passport::actingAs($creator);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", ['generation' => 3, 'keys' => [rotKeyFor($creator->id, 3, 'own'), rotKeyFor($coOwner->id, 3, 'code')], 'recovery' => null])->assertStatus(422);
+    $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", ['generation' => 3, 'keys' => [rotKeyFor($creator->id, 3, 'own'), rotKeyFor($coOwner->id, 3, 'code')], 'recovery' => ['recoverySalt' => 's', 'dekWrappedRecovery' => 'r3', 'dekCheck' => 'c']])->assertCreated();
+    expect(WorkspaceVaultRecovery::where('workspace_id', $ws->id)->where('generation', 3)->value('created_by'))->toBe($creator->id);
 });
 
 it('lists members with roles for a member, and 403s a stranger', function () {

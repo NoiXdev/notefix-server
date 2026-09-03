@@ -191,9 +191,11 @@ class VaultKeyController extends Controller
             $given = collect($d['keys'])->pluck('userId')->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
             abort_unless($current === $given, 422, 'keys must cover exactly the current members');
 
-            $creator = WorkspaceVaultRecovery::where('workspace_id', $locked->id)->where('generation', 1)->value('created_by');
-            $creator = $creator === null ? null : (int) $creator;
-            abort_if($creator === $user->id && empty($d['recovery']), 422, 'the vault creator must supply the recovery wrap');
+            // Whoever holds a recovery set must extend it to the new
+            // generation right here; an owner without one simply sends null
+            // and the other holders follow up from their own devices.
+            $holdsRecovery = WorkspaceVaultRecovery::where('workspace_id', $locked->id)->where('created_by', $user->id)->exists();
+            abort_if($holdsRecovery && empty($d['recovery']), 422, 'a recovery holder must supply the recovery wrap');
 
             // A wrap attached at an older generation is superseded by this
             // rotation — but only for invitations still OPEN. An accepted
@@ -224,7 +226,7 @@ class VaultKeyController extends Controller
             }
             if (! empty($d['recovery'])) {
                 WorkspaceVaultRecovery::create([
-                    'workspace_id' => $locked->id, 'generation' => $d['generation'], 'created_by' => $creator ?? $user->id,
+                    'workspace_id' => $locked->id, 'generation' => $d['generation'], 'created_by' => $user->id,
                     'recovery_salt' => $d['recovery']['recoverySalt'],
                     'dek_wrapped_recovery' => $d['recovery']['dekWrappedRecovery'],
                     'dek_check' => $d['recovery']['dekCheck'],
@@ -237,26 +239,25 @@ class VaultKeyController extends Controller
     }
 
     /**
-     * The creator's recovery wrap for a generation can arrive after the
-     * rotation itself, since a non-creator rotator never has the recovery
-     * key. Only the person who created the vault (the `created_by` of its
-     * generation-1 recovery row) may add the missing wrap, and only once per
-     * generation.
+     * Every owner may hold their own recovery set (one wrap per generation
+     * and holder); the wrap for a rotated generation can arrive after the
+     * rotation itself, since a rotator without that owner's recovery key
+     * never has it in hand.
      */
     public function putRecovery(PutRecoveryWrapRequest $request, Workspace $workspace): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
         self::authorizeMember($workspace, $user);
+        Gate::authorize('manage', $workspace);
         $d = $request->validated();
 
-        $creator = WorkspaceVaultRecovery::where('workspace_id', $workspace->id)->where('generation', 1)->value('created_by');
-        abort_unless($creator !== null && (int) $creator === $user->id, 403, 'only the vault creator may add a recovery wrap');
         abort_if((int) $d['generation'] > (int) $workspace->vault_generation, 422, 'generation is ahead of the vault');
         abort_if(
-            WorkspaceVaultRecovery::where('workspace_id', $workspace->id)->where('generation', $d['generation'])->exists(),
+            WorkspaceVaultRecovery::where('workspace_id', $workspace->id)
+                ->where('generation', $d['generation'])->where('created_by', $user->id)->exists(),
             409,
-            'recovery wrap already exists for that generation',
+            'you already hold a recovery wrap for that generation',
         );
 
         WorkspaceVaultRecovery::create([
