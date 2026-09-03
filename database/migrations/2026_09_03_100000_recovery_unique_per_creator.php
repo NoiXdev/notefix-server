@@ -14,6 +14,10 @@ return new class extends Migration
         });
     }
 
+    // Re-adding the (workspace_id, generation) unique fails once two owners hold
+    // rows for one generation, and since DDL isn't transactional on MySQL/MariaDB
+    // the table is then left without any unique index — roll back only before
+    // per-owner rows exist.
     public function down(): void
     {
         Schema::table('workspace_vault_recovery', function (Blueprint $t) {

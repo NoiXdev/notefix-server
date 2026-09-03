@@ -55,7 +55,7 @@ it('rejects a stale generation number', function () {
     $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", ['generation' => 3, 'keys' => [keyFor($owner->id, 3)], 'recovery' => null])->assertStatus(422);
 });
 
-it('requires the vault creator to supply a recovery wrap, but not a non-creator owner', function () {
+it('requires a recovery-set holder to supply a recovery wrap, but not a non-holder owner', function () {
     $owner = User::factory()->create();
     $coOwner = User::factory()->create();
     $ws = $owner->ownedWorkspaces->first();
@@ -66,11 +66,11 @@ it('requires the vault creator to supply a recovery wrap, but not a non-creator 
     }
     WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $owner->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'r', 'dek_check' => 'c']);
 
-    // (a) The vault creator omitting recovery → 422.
+    // (a) The recovery-set holder omitting recovery → 422.
     Passport::actingAs($owner);
     $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", ['generation' => 2, 'keys' => [keyFor($owner->id, 2), keyFor($coOwner->id, 2)], 'recovery' => null])->assertStatus(422);
 
-    // (b) A non-creator owner omitting recovery → succeeds, no new recovery row.
+    // (b) A non-holder owner omitting recovery → succeeds, no new recovery row.
     Passport::actingAs($coOwner);
     $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", ['generation' => 2, 'keys' => [keyFor($owner->id, 2), keyFor($coOwner->id, 2)], 'recovery' => null])->assertCreated()->assertJsonPath('vaultGeneration', 2);
     expect($ws->fresh()->vault_generation)->toBe(2)
