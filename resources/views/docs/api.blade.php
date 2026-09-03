@@ -146,7 +146,7 @@ Accept: application/json</pre>
     </div>
     <div class="endpoint">
         <span class="method get">GET</span><code>/api/workspaces/{workspace}/members</code>
-        <p>List every member with their role, so a client can compute the key set a rotation must cover. Any member. <code>200</code> on success, <code>403</code> for a non-member.</p>
+        <p>List every member with their role and display name, so a client can compute the key set a rotation must cover and label each entry. Any member. <code>200</code> with <code>{ "members": [{ "userId": 1, "role": "owner", "name": "Ada" }] }</code> — <code>name</code> is the account's display name and may be an empty string; no e-mail address is returned. <code>403</code> for a non-member.</p>
     </div>
 </div>
 </body>

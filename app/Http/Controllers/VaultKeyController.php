@@ -267,7 +267,9 @@ class VaultKeyController extends Controller
      * rotation must cover. Any member may read it; the owner is included
      * through their own `workspace_members` row (every user gets one, see
      * `UserObserver`). `name` is the member's display name (may be empty);
-     * no e-mail leaves the server.
+     * no e-mail leaves the server. The `$m->user !== null` fallback below is
+     * only to satisfy Larastan's nullable relation typing — memberships
+     * cascade on user deletion, so it's unreachable at runtime.
      */
     public function members(Request $request, Workspace $workspace): JsonResponse
     {
@@ -275,7 +277,7 @@ class VaultKeyController extends Controller
         $user = $request->user();
         self::authorizeMember($workspace, $user);
 
-        $members = $workspace->members()->with('user')->orderBy('user_id')->get()
+        $members = $workspace->members()->with('user:id,name')->orderBy('user_id')->get()
             ->map(fn ($m) => [
                 'userId' => (int) $m->user_id,
                 'role' => $m->role->value,
