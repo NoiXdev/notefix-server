@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WorkspaceRole;
 use App\Http\Resources\FolderResource;
 use App\Http\Resources\NoteResource;
 use App\Models\Invitation;
@@ -26,19 +27,23 @@ class SyncController extends Controller
     {
         Gate::authorize('view', $workspace);
 
-        $result = $this->sync->pull($workspace, $request->integer('since'));
-        $workspace->refresh();
-
         /** @var User $user */
         $user = $request->user();
+        $role = $workspace->memberRole($user);
+        // The view gate above already requires membership, so this is unreachable
+        // in practice — it just gives Larastan a narrowed, non-nullable $role.
+        abort_if($role === null, 403);
+
+        $result = $this->sync->pull($workspace, $request->integer('since'));
+        $workspace->refresh();
 
         return [
             'cursor' => $result['cursor'],
             'vaultGeneration' => (int) $workspace->vault_generation,
             'vaultRotationPending' => (bool) $workspace->vault_rotation_pending,
             'vaultKeys' => $this->vaultKeysFor($workspace, $user),
-            'workspaceRole' => $workspace->memberRole($user)->value,
-            'vaultInvites' => $this->vaultInvitesFor($workspace, $user),
+            'workspaceRole' => $role->value,
+            'vaultInvites' => $this->vaultInvitesFor($workspace, $role === WorkspaceRole::Owner),
             'folders' => FolderResource::collection($result['folders']),
             'notes' => NoteResource::collection($result['notes']),
         ];
@@ -69,13 +74,14 @@ class SyncController extends Controller
     /**
      * An owner's open invitations with the generation of the vault wrap
      * attached to each (null when none) — so the owner's client can tell
-     * which invitations lost their code in a rotation. Empty for non-owners.
+     * which invitations lost their code in a rotation. Empty for non-owners,
+     * and empty while the workspace has no vault yet.
      *
      * @return list<array{invitationId: int, generation: int|null}>
      */
-    private function vaultInvitesFor(Workspace $workspace, User $user): array
+    private function vaultInvitesFor(Workspace $workspace, bool $isOwner): array
     {
-        if (! Gate::forUser($user)->allows('manage', $workspace)) {
+        if (! $isOwner || (int) $workspace->vault_generation === 0) {
             return [];
         }
         $open = $workspace->invitations()

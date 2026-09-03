@@ -35,3 +35,15 @@ it('shows an owner the open invitations with their wrap generation, and members 
     expect($body['workspaceRole'])->toBe('editor')
         ->and($body['vaultInvites'])->toBe([]);
 });
+
+it('hides invitations from a workspace that has no vault, even for the owner', function () {
+    $owner = User::factory()->create();
+    $ws = $owner->ownedWorkspaces->first();
+    expect($ws->vault_generation)->toBe(0);
+    Invitation::create(['workspace_id' => $ws->id, 'token' => Str::random(40), 'role' => 'editor', 'invited_by' => $owner->id, 'created_at' => now()]);
+
+    Passport::actingAs($owner);
+    $body = $this->getJson("/api/workspaces/{$ws->id}/changes?since=0")->assertOk()->json();
+    expect($body['workspaceRole'])->toBe('owner')
+        ->and($body['vaultInvites'])->toBe([]);
+});

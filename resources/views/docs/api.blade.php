@@ -83,7 +83,7 @@ Accept: application/json</pre>
       "position": 0, "updatedAt": "2026-06-25T09:00:00+00:00", "deletedAt": null }
   ]
 }</pre>
-    <p>Store <code>cursor</code> and pass it as <code>since</code> on the next pull. <code>vaultGeneration</code> and <code>vaultRotationPending</code> reflect the workspace's protected-notes vault (see <a href="#vault">Vault</a> below); <code>vaultKeys</code> holds only the wraps that belong to the caller — their own key per generation they hold (<code>mine</code>), any recovery wraps they created (<code>recovery</code>), and any rotation wraps waiting for them to convert into a key of their own (<code>rotation</code>). <code>workspaceRole</code> is the caller's role; <code>vaultInvites</code> is, for owners, the workspace's open invitations with the generation of their attached vault wrap or <code>null</code> when the invitation predates it (empty for non-owners).</p>
+    <p>Store <code>cursor</code> and pass it as <code>since</code> on the next pull. <code>vaultGeneration</code> and <code>vaultRotationPending</code> reflect the workspace's protected-notes vault (see <a href="#vault">Vault</a> below); <code>vaultKeys</code> holds only the wraps that belong to the caller — their own key per generation they hold (<code>mine</code>), any recovery wraps they created (<code>recovery</code>), and any rotation wraps waiting for them to convert into a key of their own (<code>rotation</code>). <code>workspaceRole</code> is the caller's role; <code>vaultInvites</code> is, for owners, the workspace's open invitations with the generation of their attached vault wrap, or <code>null</code> when no vault wrap is attached (the invitation predates the vault, or a rotation retired its wrap) — empty for non-owners, and empty while the workspace has no vault.</p>
 
     <h2>Push changes</h2>
     <div class="endpoint">
@@ -143,7 +143,7 @@ Accept: application/json</pre>
     </div>
     <div class="endpoint">
         <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/rotate</code>
-        <p>Advance the vault to a new generation: an own key for the rotator, rotation-wrapped keys (<code>kind: "code"</code>) for every other current member, and optionally a new recovery wrap. Owner only. <code>201</code> on success. <code>422</code> if <code>generation</code> isn't exactly one past the current generation, if the supplied keys don't cover exactly the current members (one per member, no repeats), or if the rotator holds a recovery set and supplies no wrap for the new generation. Any invite wrap left over from an earlier generation is deleted as part of the rotation.</p>
+        <p>Advance the vault to a new generation: an own key for the rotator, rotation-wrapped keys (<code>kind: "code"</code>) for every other current member, and optionally a new recovery wrap. Owner only. <code>201</code> on success. <code>422</code> if <code>generation</code> isn't exactly one past the current generation, if the supplied keys don't cover exactly the current members (one per member, no repeats), or if the rotator holds a recovery set and supplies no wrap for the new generation. Invite wraps from an earlier generation are deleted only for invitations that are still open; an accepted invitee keeps theirs, since it still opens the notes sealed before the rotation.</p>
     </div>
     <div class="endpoint">
         <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/recovery</code>
