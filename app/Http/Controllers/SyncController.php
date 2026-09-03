@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\FolderResource;
 use App\Http\Resources\NoteResource;
+use App\Models\Invitation;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkspaceVaultInvite;
 use App\Models\WorkspaceVaultKey;
 use App\Models\WorkspaceVaultRecovery;
 use App\Models\WorkspaceVaultRotationWrap;
@@ -35,6 +37,8 @@ class SyncController extends Controller
             'vaultGeneration' => (int) $workspace->vault_generation,
             'vaultRotationPending' => (bool) $workspace->vault_rotation_pending,
             'vaultKeys' => $this->vaultKeysFor($workspace, $user),
+            'workspaceRole' => $workspace->memberRole($user)->value,
+            'vaultInvites' => $this->vaultInvitesFor($workspace, $user),
             'folders' => FolderResource::collection($result['folders']),
             'notes' => NoteResource::collection($result['notes']),
         ];
@@ -60,6 +64,32 @@ class SyncController extends Controller
             ])->values()->all();
 
         return ['mine' => $mine, 'recovery' => $recovery, 'rotation' => $rotation];
+    }
+
+    /**
+     * An owner's open invitations with the generation of the vault wrap
+     * attached to each (null when none) — so the owner's client can tell
+     * which invitations lost their code in a rotation. Empty for non-owners.
+     *
+     * @return list<array{invitationId: int, generation: int|null}>
+     */
+    private function vaultInvitesFor(Workspace $workspace, User $user): array
+    {
+        if (! Gate::forUser($user)->allows('manage', $workspace)) {
+            return [];
+        }
+        $open = $workspace->invitations()
+            ->whereNull('accepted_at')
+            ->where(function ($q) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->orderBy('id')->get();
+        $wraps = WorkspaceVaultInvite::whereIn('invitation_id', $open->pluck('id'))->pluck('generation', 'invitation_id');
+
+        return $open->map(fn (Invitation $i) => [
+            'invitationId' => (int) $i->id,
+            'generation' => isset($wraps[$i->id]) ? (int) $wraps[$i->id] : null,
+        ])->values()->all();
     }
 
     /**

@@ -66,6 +66,11 @@ Accept: application/json</pre>
       { "generation": 2, "kdfParams": {}, "dekWrapped": "...", "dekCheck": "..." }
     ]
   },
+  "workspaceRole": "owner",
+  "vaultInvites": [
+    { "invitationId": 1, "generation": 1 },
+    { "invitationId": 2, "generation": null }
+  ],
   "folders": [
     { "id": "uuid", "parentId": null, "name": "Work", "locked": false, "icon": null,
       "color": null, "sort": null, "position": 0,
@@ -78,7 +83,7 @@ Accept: application/json</pre>
       "position": 0, "updatedAt": "2026-06-25T09:00:00+00:00", "deletedAt": null }
   ]
 }</pre>
-    <p>Store <code>cursor</code> and pass it as <code>since</code> on the next pull. <code>vaultGeneration</code> and <code>vaultRotationPending</code> reflect the workspace's protected-notes vault (see <a href="#vault">Vault</a> below); <code>vaultKeys</code> holds only the wraps that belong to the caller — their own key per generation they hold (<code>mine</code>), any recovery wraps they created (<code>recovery</code>), and any rotation wraps waiting for them to convert into a key of their own (<code>rotation</code>).</p>
+    <p>Store <code>cursor</code> and pass it as <code>since</code> on the next pull. <code>vaultGeneration</code> and <code>vaultRotationPending</code> reflect the workspace's protected-notes vault (see <a href="#vault">Vault</a> below); <code>vaultKeys</code> holds only the wraps that belong to the caller — their own key per generation they hold (<code>mine</code>), any recovery wraps they created (<code>recovery</code>), and any rotation wraps waiting for them to convert into a key of their own (<code>rotation</code>). <code>workspaceRole</code> is the caller's role; <code>vaultInvites</code> is, for owners, the workspace's open invitations with the generation of their attached vault wrap or <code>null</code> when the invitation predates it (empty for non-owners).</p>
 
     <h2>Push changes</h2>
     <div class="endpoint">
