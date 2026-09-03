@@ -13,7 +13,7 @@ The Notefix desktop app connects to one or more of these servers, and keeps work
 
 ## Self-hosting
 
-See [`docs/development.md`](docs/development.md) for running and deploying the server.
+See [`docs/development.md`](docs/development.md) for running and deploying the server. The scheduler that ships in the image also prunes invitations that expired more than seven days ago, once a day; their vault wraps are removed with them.
 
 ## License
 
