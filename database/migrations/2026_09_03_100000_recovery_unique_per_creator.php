@@ -9,8 +9,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('workspace_vault_recovery', function (Blueprint $t) {
-            $t->dropUnique(['workspace_id', 'generation']);
+            // Add first, drop second: on MariaDB the workspace_id foreign key
+            // leans on the (workspace_id, generation) unique — dropping it
+            // before another index with leftmost workspace_id exists fails
+            // with error 1553.
             $t->unique(['workspace_id', 'generation', 'created_by'], 'wvr_workspace_generation_creator_unique');
+            $t->dropUnique(['workspace_id', 'generation']);
         });
     }
 
@@ -21,8 +25,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('workspace_vault_recovery', function (Blueprint $t) {
-            $t->dropUnique('wvr_workspace_generation_creator_unique');
             $t->unique(['workspace_id', 'generation']);
+            $t->dropUnique('wvr_workspace_generation_creator_unique');
         });
     }
 };

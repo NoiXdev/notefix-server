@@ -17,7 +17,8 @@ return new class extends Migration
             $table->text('dek_wrapped');
             $table->text('dek_check');
             $table->timestamps();
-            $table->unique(['workspace_id', 'user_id', 'generation']);
+            // Named: Laravel's default would be 69 chars, over MariaDB's 64-char identifier limit.
+            $table->unique(['workspace_id', 'user_id', 'generation'], 'wvrw_workspace_user_generation_unique');
         });
     }
 
