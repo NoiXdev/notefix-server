@@ -145,9 +145,13 @@ it('lists members with roles for a member, and 403s a stranger', function () {
     Passport::actingAs($member);
     $listed = $this->getJson("/api/workspaces/{$ws->id}/members")->assertOk()->json('members');
     expect($listed)->toBe([
-        ['userId' => $owner->id, 'role' => 'owner'],
-        ['userId' => $member->id, 'role' => 'viewer'],
+        ['userId' => $owner->id, 'role' => 'owner', 'name' => $owner->name],
+        ['userId' => $member->id, 'role' => 'viewer', 'name' => $member->name],
     ]);
+
+    $member->forceFill(['name' => ''])->save();
+    $again = $this->getJson("/api/workspaces/{$ws->id}/members")->assertOk()->json('members');
+    expect($again[1])->toBe(['userId' => $member->id, 'role' => 'viewer', 'name' => '']);
 
     Passport::actingAs($stranger);
     $this->getJson("/api/workspaces/{$ws->id}/members")->assertStatus(403);

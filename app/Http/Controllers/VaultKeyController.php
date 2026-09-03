@@ -266,7 +266,8 @@ class VaultKeyController extends Controller
      * Owner + members with their roles, so a client can build the key set a
      * rotation must cover. Any member may read it; the owner is included
      * through their own `workspace_members` row (every user gets one, see
-     * `UserObserver`).
+     * `UserObserver`). `name` is the member's display name (may be empty);
+     * no e-mail leaves the server.
      */
     public function members(Request $request, Workspace $workspace): JsonResponse
     {
@@ -274,8 +275,12 @@ class VaultKeyController extends Controller
         $user = $request->user();
         self::authorizeMember($workspace, $user);
 
-        $members = $workspace->members()->orderBy('user_id')->get()
-            ->map(fn ($m) => ['userId' => (int) $m->user_id, 'role' => $m->role->value])
+        $members = $workspace->members()->with('user')->orderBy('user_id')->get()
+            ->map(fn ($m) => [
+                'userId' => (int) $m->user_id,
+                'role' => $m->role->value,
+                'name' => $m->user !== null ? (string) $m->user->name : '',
+            ])
             ->values()->all();
 
         return response()->json(['members' => $members]);
