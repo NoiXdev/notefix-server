@@ -155,6 +155,29 @@ it('requires the recovery wrap on rotation only from a recovery holder', functio
     expect(WorkspaceVaultRecovery::where('workspace_id', $ws->id)->where('generation', 3)->value('created_by'))->toBe($creator->id);
 });
 
+it('requires the wrap from a non-creator recovery holder too, and attributes it to them, not the creator', function () {
+    $creator = User::factory()->create();
+    $ws = $creator->ownedWorkspaces->first();
+    $ws->forceFill(['vault_generation' => 1])->save();
+    WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $creator->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $creator->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'r1', 'dek_check' => 'c']);
+    $coOwner = User::factory()->create();
+    WorkspaceMember::create(['workspace_id' => $ws->id, 'user_id' => $coOwner->id, 'role' => 'owner']);
+    WorkspaceVaultKey::create(['workspace_id' => $ws->id, 'user_id' => $coOwner->id, 'generation' => 1, 'kdf_params' => [], 'dek_wrapped' => 'w', 'dek_check' => 'c']);
+    // The co-owner holds their own recovery set too — this is the case the
+    // old creator-only rule could never see, since it only ever looked at
+    // generation 1's created_by.
+    WorkspaceVaultRecovery::create(['workspace_id' => $ws->id, 'generation' => 1, 'created_by' => $coOwner->id, 'recovery_salt' => 's', 'dek_wrapped_recovery' => 'co1', 'dek_check' => 'c']);
+
+    Passport::actingAs($coOwner);
+    // A non-creator holder omitting the wrap must still 422.
+    $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", ['generation' => 2, 'keys' => [rotKeyFor($coOwner->id, 2, 'own'), rotKeyFor($creator->id, 2, 'code')], 'recovery' => null])->assertStatus(422);
+    // Supplying it succeeds, and the new row is attributed to the co-owner, not the creator.
+    $this->postJson("/api/workspaces/{$ws->id}/vault/rotate", ['generation' => 2, 'keys' => [rotKeyFor($coOwner->id, 2, 'own'), rotKeyFor($creator->id, 2, 'code')], 'recovery' => ['recoverySalt' => 's', 'dekWrappedRecovery' => 'co2', 'dekCheck' => 'c']])->assertCreated();
+    expect(WorkspaceVaultRecovery::where('workspace_id', $ws->id)->where('generation', 2)->where('created_by', $coOwner->id)->exists())->toBeTrue()
+        ->and(WorkspaceVaultRecovery::where('workspace_id', $ws->id)->where('generation', 2)->where('created_by', $creator->id)->exists())->toBeFalse();
+});
+
 it('lists members with roles for a member, and 403s a stranger', function () {
     $owner = User::factory()->create();
     $member = User::factory()->create();

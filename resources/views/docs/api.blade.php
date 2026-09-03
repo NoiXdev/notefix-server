@@ -138,7 +138,7 @@ Accept: application/json</pre>
     </div>
     <div class="endpoint">
         <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/rotate</code>
-        <p>Advance the vault to a new generation: an own key for the rotator, rotation-wrapped keys (<code>kind: "code"</code>) for every other current member, and optionally a new recovery wrap. Owner only. <code>201</code> on success. <code>422</code> if <code>generation</code> isn't exactly one past the current generation, if the supplied keys don't cover exactly the current members (one per member, no repeats), or if the vault's creator is rotating without supplying a recovery wrap. Any invite wrap left over from an earlier generation is deleted as part of the rotation.</p>
+        <p>Advance the vault to a new generation: an own key for the rotator, rotation-wrapped keys (<code>kind: "code"</code>) for every other current member, and optionally a new recovery wrap. Owner only. <code>201</code> on success. <code>422</code> if <code>generation</code> isn't exactly one past the current generation, if the supplied keys don't cover exactly the current members (one per member, no repeats), or if the rotator holds a recovery set and supplies no wrap for the new generation. Any invite wrap left over from an earlier generation is deleted as part of the rotation.</p>
     </div>
     <div class="endpoint">
         <span class="method post">POST</span><code>/api/workspaces/{workspace}/vault/recovery</code>
