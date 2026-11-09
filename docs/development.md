@@ -121,13 +121,34 @@ verify → switch in Storage settings).
 
 `Dockerfile` builds a single production image (serversideup/php 8.3 fpm-nginx;
 Node stage builds the Vite/Tailwind assets, Composer stage installs `--no-dev`,
-Filament assets are published at build). Build and push to Harbor, then deploy
-`docker-compose.yml` as a Portainer stack:
+Filament assets are published at build). Released images are published to
+Docker Hub by GitHub Actions, then `docker-compose.yml` is deployed as a
+Portainer stack.
 
-```sh
-docker build -t harbor.cloud.noidee.dev/notefix/server:latest .   # adjust namespace
-docker push   harbor.cloud.noidee.dev/notefix/server:latest
-```
+### CI and releases
+
+- **CI** (`.github/workflows/ci.yml`, every push to `main` and every PR): Pint,
+  Larastan, Pest, and a Docker build that is scanned with Trivy (CRITICAL/HIGH
+  with an available fix fail the build). Nothing is pushed.
+- **Release** (`.github/workflows/release.yml`, run manually from the Actions
+  tab): pick `patch`/`minor`/`major`. It bumps the version in `package.json`,
+  regenerates `CHANGELOG.md` from conventional commits, builds and pushes the
+  image (`linux/amd64`, with SBOM + provenance), commits the bump to `main`,
+  tags `vX.Y.Z` and creates a GitHub release. Tags pushed: `X.Y.Z`, `X.Y`, `X`
+  and `latest` (a pre-release gets only `X.Y.Z`). `dry_run` runs everything
+  without pushing anything.
+
+The release workflow needs these repository settings:
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Variable | `DOCKERHUB_NAMESPACE` | Docker Hub user or organisation |
+| Variable | `DOCKERHUB_IMAGE` | image name, e.g. `notefix-server` |
+| Secret | `DOCKERHUB_USERNAME` | Docker Hub user that pushes |
+| Secret | `DOCKERHUB_TOKEN` | Docker Hub access token (Read & Write) |
+| Secret | `DISCORD_WEBHOOK_RELEASE_NOTIFICATION` | optional; release announcement |
+
+Local build: `docker build -t notefix-server:local .`
 
 The stack is self-contained: `app` (web), `horizon` (worker), `scheduler`, plus
 `mariadb` and `redis` — all three app services run the **same image** with the

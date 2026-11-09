@@ -4,14 +4,14 @@
 # The same image runs the web app, the Horizon worker and the scheduler — the
 # command is overridden per service in docker-compose.yml.
 #
-# Build & push to Harbor, then deploy the compose stack via Portainer:
-#   docker build -t harbor.cloud.noidee.dev/notefix/server:latest .
-#   docker push   harbor.cloud.noidee.dev/notefix/server:latest
+# Released images are built and pushed to Docker Hub by the Release workflow
+# (.github/workflows/release.yml). Local build:
+#   docker build -t notefix-server:local .
 
 # ---- 1. Front-end assets (Vite + Tailwind v4) -------------------------------
 FROM node:22-alpine AS frontend
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 RUN npm ci
 # Sources Tailwind scans + the Vite entry points.
 COPY vite.config.js ./
@@ -25,9 +25,12 @@ RUN npm run build
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
+# The composer image lacks intl/pcntl; the runtime stage installs every
+# extension, and `composer check-platform-reqs` there verifies them.
 RUN composer install \
         --no-dev --no-scripts --no-interaction --no-progress \
-        --prefer-dist --optimize-autoloader
+        --prefer-dist --optimize-autoloader \
+        --ignore-platform-req='ext-*'
 
 # ---- 3. Runtime -------------------------------------------------------------
 FROM serversideup/php:8.3-fpm-nginx AS app
@@ -35,6 +38,16 @@ FROM serversideup/php:8.3-fpm-nginx AS app
 # Horizon needs pcntl + posix; the rest cover the app + Filament.
 USER root
 RUN install-php-extensions pcntl posix redis intl bcmath gd zip exif
+
+# CI passes a new value once a day so the upgrade below actually re-runs instead
+# of being served from the BuildKit cache, which would keep shipping Debian
+# packages with published CVEs.
+ARG APT_REFRESH=0
+RUN echo "apt refresh: ${APT_REFRESH}" \
+    && apt-get update \
+    && apt-get upgrade -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 USER www-data
 
 WORKDIR /var/www/html
@@ -43,6 +56,10 @@ WORKDIR /var/www/html
 COPY --chown=www-data:www-data . .
 COPY --from=vendor   --chown=www-data:www-data /app/vendor       ./vendor
 COPY --from=frontend --chown=www-data:www-data /app/public/build ./public/build
+
+# Fail the build if the runtime lacks a PHP version or extension the locked
+# packages need (the vendor stage skipped the extension checks).
+RUN composer check-platform-reqs --no-dev
 
 # Publish Filament's bundled CSS/JS (composer scripts were skipped above).
 # No database is touched by this command.

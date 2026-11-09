@@ -14,6 +14,7 @@ public/hot
 .env
 .env.*
 !.env.example
+storage/*.key
 
 # Local runtime state
 storage/logs/*

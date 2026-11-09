@@ -5,7 +5,7 @@
 # (encrypted in the DB), so they need no env here.
 #
 # Set these in Portainer → Stack → "Environment variables":
-#   APP_IMAGE          harbor.cloud.noidee.dev/notefix/server:<tag>   (adjust namespace)
+#   APP_IMAGE          <dockerhub-namespace>/notefix-server:<tag>   (e.g. :1.2.3, :1.2, :latest)
 #   APP_KEY            base64:...   (php artisan key:generate --show)
 #   APP_URL            https://notes.example.com
 #   APP_HOST           notes.example.com           (Traefik Host rule)
