@@ -26,10 +26,10 @@ class NoteResource extends JsonResource
             'pinned' => $this->pinned,
             'archived' => $this->archived,
             'color' => $this->color,
-            'dueAt' => $this->due_at?->toIso8601String(),
+            'dueAt' => $this->due_at?->toRfc3339String(true), // with milliseconds
             'position' => $this->position,
-            'updatedAt' => $this->updated_at?->toIso8601String(),
-            'deletedAt' => $this->deleted_at?->toIso8601String(),
+            'updatedAt' => $this->updated_at?->toRfc3339String(true), // with milliseconds
+            'deletedAt' => $this->deleted_at?->toRfc3339String(true), // with milliseconds
         ];
     }
 }

@@ -17,6 +17,9 @@ class Folder extends Model
 
     public $timestamps = false;
 
+    /** Millisecond precision: last-write-wins compares `updated_at`. */
+    protected $dateFormat = 'Y-m-d H:i:s.v';
+
     protected $fillable = [
         'id', 'workspace_id', 'parent_id', 'name', 'locked', 'icon', 'color', 'sort', 'position', 'sync_seq', 'updated_at',
     ];

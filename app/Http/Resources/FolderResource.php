@@ -25,8 +25,8 @@ class FolderResource extends JsonResource
             'color' => $this->color,
             'sort' => $this->sort,
             'position' => $this->position,
-            'updatedAt' => $this->updated_at?->toIso8601String(),
-            'deletedAt' => $this->deleted_at?->toIso8601String(),
+            'updatedAt' => $this->updated_at?->toRfc3339String(true), // with milliseconds
+            'deletedAt' => $this->deleted_at?->toRfc3339String(true), // with milliseconds
         ];
     }
 }

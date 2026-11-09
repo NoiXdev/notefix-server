@@ -19,6 +19,9 @@ class Note extends Model
 
     public $timestamps = false;
 
+    /** Millisecond precision: last-write-wins compares `updated_at`. */
+    protected $dateFormat = 'Y-m-d H:i:s.v';
+
     protected $fillable = [
         'id', 'workspace_id', 'folder_id', 'content', 'protected', 'title', 'key_gen', 'pinned', 'archived', 'color',
         'due_at', 'position', 'sync_seq', 'updated_at', 'updated_by',

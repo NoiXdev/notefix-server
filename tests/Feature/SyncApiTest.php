@@ -51,3 +51,33 @@ it('forbids a viewer from pushing', function () {
 
     $this->postJson("/api/workspaces/{$this->ws->id}/changes", ['notes' => []])->assertForbidden();
 });
+
+it('keeps millisecond timestamps through a push and pull', function () {
+    $nid = Str::uuid()->toString();
+    $fid = Str::uuid()->toString();
+
+    $this->postJson("/api/workspaces/{$this->ws->id}/changes", [
+        'folders' => [['id' => $fid, 'name' => 'F', 'updatedAt' => '2026-11-09T08:15:05.282Z', 'deletedAt' => '2026-11-09T08:15:06.004Z']],
+        'notes' => [['id' => $nid, 'content' => 'x', 'updatedAt' => '2026-11-09T08:15:05.282Z', 'dueAt' => '2026-11-10T09:00:00.120Z']],
+    ])->assertOk()
+        ->assertJsonPath('notes.0.updatedAt', '2026-11-09T08:15:05.282+00:00');
+
+    $this->getJson("/api/workspaces/{$this->ws->id}/changes?since=0")
+        ->assertOk()
+        ->assertJsonPath('notes.0.updatedAt', '2026-11-09T08:15:05.282+00:00')
+        ->assertJsonPath('notes.0.dueAt', '2026-11-10T09:00:00.120+00:00')
+        ->assertJsonPath('folders.0.deletedAt', '2026-11-09T08:15:06.004+00:00');
+});
+
+it('decides last-write-wins within the same second', function () {
+    $id = Str::uuid()->toString();
+    $push = fn (string $content, string $at) => $this->postJson("/api/workspaces/{$this->ws->id}/changes", [
+        'notes' => [['id' => $id, 'content' => $content, 'updatedAt' => $at]],
+    ])->assertOk();
+
+    $push('newer', '2026-11-09T08:15:05.900Z');
+    $push('older', '2026-11-09T08:15:05.300Z'); // same second, earlier → rejected
+
+    $this->getJson("/api/workspaces/{$this->ws->id}/changes?since=0")
+        ->assertJsonPath('notes.0.content', 'newer');
+});
