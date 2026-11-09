@@ -9,7 +9,7 @@
 #   docker build -t notefix-server:local .
 
 # ---- 1. Front-end assets (Vite + Tailwind v4) -------------------------------
-FROM node:22-alpine AS frontend
+FROM node:26-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
