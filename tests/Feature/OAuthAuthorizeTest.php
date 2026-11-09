@@ -44,6 +44,35 @@ it('authorizes the first-party desktop client without a consent screen', functio
         ->toContain('state=xyz123');
 });
 
+it('redirects to a loopback listener on any port (RFC 8252 — debug desktop builds)', function () {
+    $user = User::factory()->create();
+    $client = DesktopClient::ensure();
+
+    $res = $this->actingAs($user)->get('/oauth/authorize?'.http_build_query([
+        'client_id' => $client->getKey(),
+        'redirect_uri' => 'http://127.0.0.1:53124/auth',
+        'response_type' => 'code',
+        'scope' => '',
+        'state' => 'loop',
+        'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', Str::random(64), true)), '+/', '-_'), '='),
+        'code_challenge_method' => 'S256',
+    ]));
+
+    $res->assertStatus(302);
+    expect($res->headers->get('Location'))->toStartWith('http://127.0.0.1:53124/auth?code=');
+});
+
+it('adds the loopback redirect to a desktop client created before it existed', function () {
+    app(ClientRepository::class)->createAuthorizationCodeGrantClient(
+        DesktopClient::NAME, [DesktopClient::REDIRECT], false, null,
+    );
+
+    $client = DesktopClient::ensure();
+
+    expect($client->fresh()->redirect_uris)
+        ->toBe([DesktopClient::REDIRECT, DesktopClient::LOOPBACK]);
+});
+
 it('renders the consent screen for a third-party client instead of 500', function () {
     $user = User::factory()->create();
 
