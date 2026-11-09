@@ -33,7 +33,7 @@ RUN composer install \
         --ignore-platform-req='ext-*'
 
 # ---- 3. Runtime -------------------------------------------------------------
-FROM serversideup/php:8.3-fpm-nginx AS app
+FROM serversideup/php:8.5-fpm-nginx AS app
 
 # Horizon needs pcntl + posix; the rest cover the app + Filament.
 USER root
