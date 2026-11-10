@@ -13,6 +13,10 @@
 #   DB_PASSWORD        <strong>
 #   DB_ROOT_PASSWORD   <strong>
 #   REDIS_PASSWORD     <strong>
+#   PASSPORT_PRIVATE_KEY_BASE64 / PASSPORT_PUBLIC_KEY_BASE64
+#                      OAuth signing keys, each PEM base64-encoded on one line:
+#                      openssl genrsa 4096 > k && openssl rsa -in k -pubout > k.pub
+#                      base64 < k | tr -d '\n'   (same for k.pub)
 #   TRAEFIK_NETWORK    proxy        (your external Traefik network; default: proxy)
 #   TRAEFIK_CERTRESOLVER  letsencrypt
 #
@@ -40,6 +44,10 @@ x-app-environment: &app-environment
   QUEUE_CONNECTION: redis
   CACHE_STORE: redis
   SESSION_DRIVER: redis
+  # The desktop app's OAuth tokens are signed with these; without them every
+  # app login fails, and keys generated inside a container die with it.
+  PASSPORT_PRIVATE_KEY_BASE64: ${PASSPORT_PRIVATE_KEY_BASE64:?set PASSPORT_PRIVATE_KEY_BASE64}
+  PASSPORT_PUBLIC_KEY_BASE64: ${PASSPORT_PUBLIC_KEY_BASE64:?set PASSPORT_PUBLIC_KEY_BASE64}
 
 services:
   app:
@@ -115,6 +123,14 @@ services:
       AUTORUN_ENABLED: "false"
     networks:
       - internal
+    # Without its own check it inherits the image's nginx one, which can never
+    # pass here (no web server runs in this container).
+    healthcheck:
+      test: ["CMD", "healthcheck-schedule"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   mariadb:
     image: mariadb:11

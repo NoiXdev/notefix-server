@@ -156,7 +156,10 @@ command overridden. The `app` service runs migrations + caches on first boot
 (serversideup autorun); `horizon`/`scheduler` have autorun off. It joins an
 existing external Traefik network (`proxy`) for TLS/routing. Required Portainer
 stack variables are listed at the top of `docker-compose.yml` (APP_IMAGE,
-APP_KEY, APP_URL, APP_HOST, DB_*, REDIS_PASSWORD, TRAEFIK_*). Mail and file
+APP_KEY, APP_URL, APP_HOST, DB_*, REDIS_PASSWORD, PASSPORT_*_KEY_BASE64,
+TRAEFIK_*). The Passport keys sign the desktop app's OAuth tokens; they are
+passed base64-encoded because Portainer variables can't hold newlines, and
+they must stay the same across redeploys or every app login is invalidated. Mail and file
 storage are configured at runtime in the admin panel, so they need no env.
 
 The `app-storage` volume holds note-image blobs only when the storage disk is

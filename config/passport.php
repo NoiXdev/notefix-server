@@ -28,9 +28,13 @@ return [
     |
     */
 
-    'private_key' => env('PASSPORT_PRIVATE_KEY'),
+    // The *_BASE64 variants carry a whole PEM key in one line, for container
+    // platforms (Portainer) whose environment variables can't hold newlines.
+    'private_key' => env('PASSPORT_PRIVATE_KEY')
+        ?? (($key = env('PASSPORT_PRIVATE_KEY_BASE64')) ? base64_decode($key) : null),
 
-    'public_key' => env('PASSPORT_PUBLIC_KEY'),
+    'public_key' => env('PASSPORT_PUBLIC_KEY')
+        ?? (($key = env('PASSPORT_PUBLIC_KEY_BASE64')) ? base64_decode($key) : null),
 
     /*
     |--------------------------------------------------------------------------
