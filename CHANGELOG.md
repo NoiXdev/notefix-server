@@ -1,4 +1,12 @@
-## 0.0.1 (2026-11-09)
+## [0.0.2](https://github.com/NoiXdev/notefix-server/compare/v0.0.1...v) (2026-11-10)
+
+
+### Bug Fixes
+
+* **app:** always generate https URLs ([69a26a7](https://github.com/NoiXdev/notefix-server/commit/69a26a72e3ddeee32d80e0529347998fd77a1c18))
+* **deploy:** pass Passport keys as base64 stack variables, give the scheduler its own healthcheck ([6c84d3f](https://github.com/NoiXdev/notefix-server/commit/6c84d3f6b5381a4f00abfb95086e39d8a20fe4b3))
+
+## [0.0.1](https://github.com/NoiXdev/notefix-server/compare/985596620ffbeb7524cbb526dc2f3aae5d7f1262...v0.0.1) (2026-11-09)
 
 
 ### Features
